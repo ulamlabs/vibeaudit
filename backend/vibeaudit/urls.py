@@ -30,23 +30,16 @@ class SafeTemplateView(TemplateView):
     TemplateView that returns 404 instead of 500 when template doesn't exist
     """
 
-    def get_template_names(self):
-        try:
-            return super().get_template_names()
-        except Exception:
-            raise Http404("Template not found")
-
     def get(self, request, *args, **kwargs):
-        try:
-            from django.template.loader import get_template
+        from django.template.loader import get_template
 
-            template_name = self.get_template_names()[0]
-            get_template(template_name)  # Test if template exists
-            return super().get(request, *args, **kwargs)
-        except TemplateDoesNotExist:
-            raise Http404("Template not found")
-        except Exception:
-            raise Http404("Template not found")
+        template_name = self.get_template_names()[0]
+        try:
+            get_template(template_name)
+        except TemplateDoesNotExist as exc:
+            raise Http404("Template not found") from exc
+
+        return super().get(request, *args, **kwargs)
 
 
 urlpatterns = [

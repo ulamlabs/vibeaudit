@@ -12,11 +12,14 @@ Minimal commands for local development.
 Backend:
 
 ```bash
-cd backned
+cd backend
+cp .env.example .env
 uv sync
 uv run python manage.py migrate
 uv run python manage.py runserver 0.0.0.0:8000
 ```
+
+Use `DEBUG=True` in `backend/.env` for local development.
 
 Frontend:
 

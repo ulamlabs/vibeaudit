@@ -21,11 +21,11 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 # Install backend dependencies with lockfile.
-COPY backned/pyproject.toml backned/uv.lock ./
+COPY backend/pyproject.toml backend/uv.lock ./
 RUN uv sync --locked --no-dev
 
 # Copy backend source code.
-COPY backned/ ./
+COPY backend/ ./
 
 # Copy built frontend output into Django static directory; collectstatic will handle discovery.
 COPY --from=frontend-build /frontend/build/client/. ./vibeaudit/static/

@@ -12,7 +12,7 @@ build:
 
 # Run backend dev server
 dev-be:
-    cd backned && uv run python manage.py runserver 0.0.0.0:8000
+    cd backend && uv run python manage.py runserver 0.0.0.0:8000
 
 # Alias for backend dev server
 dbe: dev-be
@@ -30,11 +30,11 @@ run:
 
 # Run Django migrations
 migrate:
-    cd backned && uv run python manage.py migrate
+    cd backend && uv run python manage.py migrate
 
 # Run backend tests (pytest-style)
 test-be:
-    cd backned && uv run pytest
+    cd backend && uv run pytest
 
 # Run frontend checks
 test-fe:
@@ -42,15 +42,15 @@ test-fe:
 
 # Lint backend with Ruff
 lint:
-    cd backned && uvx ruff check .
+    cd backend && uvx ruff check .
 
 # Lint backend with Ruff and apply fixes
 lint-fix:
-    cd backned && uvx ruff check . --fix && uvx ruff format .
+    cd backend && uvx ruff check . --fix && uvx ruff format .
 
 # Format backend with Ruff
 format:
-    cd backned && uvx ruff format .
+    cd backend && uvx ruff format .
 
 # Run backend + frontend tests
 test: test-be test-fe

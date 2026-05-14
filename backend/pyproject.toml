@@ -13,3 +13,8 @@ dependencies = [
     "whitenoise>=6.11.0",
     "gunicorn>=22.0.0",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+]
