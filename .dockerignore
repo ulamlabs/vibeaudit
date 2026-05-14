@@ -1,0 +1,32 @@
+# Node.js
+frontend/node_modules/
+frontend/build/
+frontend/.vite/
+frontend/dist/
+
+# Python
+backend/.venv/
+backend/.env
+backend/db.sqlite3
+backend/__pycache__/
+backend/*.egg-info/
+backend/.pytest_cache/
+backend/.ruff_cache/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# CI/CD
+.github/
