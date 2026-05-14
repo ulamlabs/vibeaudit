@@ -10,10 +10,10 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
+import secrets
 from pathlib import Path
 
 import environ
-from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -30,7 +30,9 @@ if DEBUG:
 else:
     SECRET_KEY = env("SECRET_KEY", default=None)
     if not SECRET_KEY:
-        raise ImproperlyConfigured("SECRET_KEY must be set when DEBUG is False.")
+        # Auto-generate a random key for non-debug builds (e.g., Docker, CI).
+        # Users should set SECRET_KEY explicitly in production to preserve sessions across restarts.
+        SECRET_KEY = secrets.token_urlsafe(50)
 
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])

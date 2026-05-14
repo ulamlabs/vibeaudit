@@ -13,13 +13,12 @@ Backend:
 
 ```bash
 cd backend
-cp .env.example .env
 uv sync
 uv run python manage.py migrate
 uv run python manage.py runserver 0.0.0.0:8000
 ```
 
-Use `DEBUG=True` in `backend/.env` for local development.
+(Optional) Create `backend/.env` with `DEBUG=True` and `SECRET_KEY` for local development; see `backend/.env.example`.
 
 Frontend:
 
