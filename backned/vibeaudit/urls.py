@@ -14,6 +14,7 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+
 from django.contrib import admin
 from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 from django.http import Http404
@@ -47,9 +48,10 @@ class SafeTemplateView(TemplateView):
         except Exception:
             raise Http404("Template not found")
 
+
 urlpatterns = [
-    path('admin/', admin.site.urls),
-    path('api/healthz', healthcheck, name='healthz'),
+    path("admin/", admin.site.urls),
+    path("api/healthz", healthcheck, name="healthz"),
 ]
 
 # Serve static files (WhiteNoise handles this efficiently in production)
@@ -60,7 +62,7 @@ urlpatterns += staticfiles_urlpatterns()
 # Keep API and static assets out of the fallback.
 urlpatterns += [
     re_path(
-        r'^(?!api(?:/|$)|static(?:/|$)).*$',
-        SafeTemplateView.as_view(template_name='index.html'),
+        r"^(?!api(?:/|$)|static(?:/|$)).*$",
+        SafeTemplateView.as_view(template_name="index.html"),
     )
 ]

@@ -1,1 +1,1 @@
-from .health import healthcheck
+from .health import healthcheck as healthcheck
