@@ -52,10 +52,10 @@ urlpatterns = [
 urlpatterns += staticfiles_urlpatterns()
 
 # SPA fallback for BrowserRouter routes.
-# Keep API and static assets out of the fallback.
+# Keep backend and static asset prefixes out of the fallback.
 urlpatterns += [
     re_path(
-        r"^(?!api(?:/|$)|static(?:/|$)).*$",
+        r"^(?!(?:api|admin|static)(?:/|$)).*$",
         SafeTemplateView.as_view(template_name="index.html"),
     )
 ]
