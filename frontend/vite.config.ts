@@ -1,20 +1,19 @@
-import { reactRouter } from "@react-router/dev/vite";
-import tailwindcss from "@tailwindcss/vite";
-import { defineConfig } from "vite";
+import { defineConfig } from 'vite'
+import { devtools } from '@tanstack/devtools-vite'
 
-export default defineConfig(({ mode }) => ({
-  // Build assets under /static for Django/WhiteNoise in production.
-  base: mode === "production" ? "/static/" : "/",
-  plugins: [tailwindcss(), reactRouter()],
-  resolve: {
-    tsconfigPaths: true,
-  },
-  server: {
-    proxy: {
-      "/api": {
-        target: "http://127.0.0.1:8000",
-        changeOrigin: true,
-      },
-    },
-  },
-}));
+import { tanstackRouter } from '@tanstack/router-plugin/vite'
+
+import viteReact from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
+
+const config = defineConfig({
+  resolve: { tsconfigPaths: true },
+  plugins: [
+    devtools(),
+    tailwindcss(),
+    tanstackRouter({ target: 'react', autoCodeSplitting: true }),
+    viteReact(),
+  ],
+})
+
+export default config

@@ -29,7 +29,7 @@ COPY backend/ ./
 RUN uv sync --locked --no-dev
 
 # Copy built frontend output into Django static directory; collectstatic will handle discovery.
-COPY --from=frontend-build /frontend/build/client/. ./vibeaudit/static/
+COPY --from=frontend-build /frontend/dist/. ./vibeaudit/static/
 
 # Runtime entrypoint.
 COPY deploy/entrypoint.sh /entrypoint.sh
