@@ -28,6 +28,24 @@ npm install
 npm run dev
 ```
 
+## Optional: Sentry
+
+Backend (runtime env in `backend/.env`):
+
+- `BACKEND_SENTRY_DSN` enables backend Sentry when set.
+
+Frontend (build-time env):
+
+- Pass `FRONTEND_SENTRY_DSN` at image build time.
+- It is embedded into the frontend bundle as `VITE_SENTRY_DSN`.
+- If unset, frontend Sentry is not initialized.
+
+Example Docker build with frontend Sentry enabled:
+
+```bash
+docker build --build-arg FRONTEND_SENTRY_DSN=https://<key>@o0.ingest.sentry.io/<project> -t vibeaudit .
+```
+
 ## Optional: just commands
 
 If you have just installed, run commands from the project root:

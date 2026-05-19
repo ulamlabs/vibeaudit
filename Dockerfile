@@ -9,6 +9,8 @@ RUN npm ci
 
 # Build frontend assets.
 COPY frontend/ ./
+ARG FRONTEND_SENTRY_DSN=""
+ENV VITE_SENTRY_DSN=$FRONTEND_SENTRY_DSN
 RUN npm run build
 
 # Backend build stage

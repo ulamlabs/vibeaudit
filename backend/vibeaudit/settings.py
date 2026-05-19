@@ -14,12 +14,19 @@ import secrets
 from pathlib import Path
 
 import environ
+import sentry_sdk
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 env = environ.Env()
 environ.Env.read_env(BASE_DIR / ".env")
+
+BACKEND_SENTRY_DSN = env("BACKEND_SENTRY_DSN", default="")
+if BACKEND_SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=BACKEND_SENTRY_DSN,
+    )
 
 
 
