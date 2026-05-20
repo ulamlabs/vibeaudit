@@ -2,13 +2,17 @@
 
 set dotenv-load := true
 
+image_repo := env_var_or_default("IMAGE_REPO", "ghcr.io/ulamlabs/vibeaudit")
+image_tag := env_var_or_default("IMAGE_TAG", "latest")
+image_ref := image_repo + ":" + image_tag
+
 # Default recipe
 default:
     @just --list
 
 # Build local Docker image
 build:
-    docker build -t vibeaudit .
+    docker build -t {{ image_ref }} .
 
 # Run backend dev server
 dev-be:
@@ -26,7 +30,7 @@ dfe: dev-fe
 
 # Run local Docker image
 run:
-    docker run --rm -p 8080:8080 vibeaudit
+    docker run --rm -p 8080:8080 {{ image_ref }}
 
 # Run Django migrations
 migrate:
