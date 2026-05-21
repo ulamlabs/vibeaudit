@@ -21,9 +21,23 @@ dev-be:
 # Alias for backend dev server
 dbe: dev-be
 
+# Install backend dependencies
+ibe:
+    cd backend && uv sync
+
+# Install frontend dependencies
+ife:
+    cd frontend && npm install
+
+# Install all dependencies
+install: ibe ife
+
+# Alias for install
+i: install
+
 # Run frontend dev server
 dev-fe:
-    cd frontend && npm run dev
+    cd frontend && pnpm dev
 
 # Alias for frontend dev server
 dfe: dev-fe
@@ -38,11 +52,14 @@ migrate:
 
 # Run backend tests (pytest-style)
 test-be:
-    cd backend && uv run pytest
+    cd backend && uv run --group dev python -m pytest
 
 # Run frontend checks
 test-fe:
-    cd frontend && npm run typecheck
+    cd frontend && pnpm typecheck
+
+# Run all tests
+test: test-be test-fe
 
 # Lint backend with Ruff
 lint:
@@ -55,7 +72,3 @@ lint-fix:
 # Format backend with Ruff
 format:
     cd backend && uvx ruff format .
-
-# Run backend + frontend tests
-test: test-be test-fe
-    @echo "All tests complete"

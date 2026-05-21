@@ -13,6 +13,7 @@ dependencies = [
     "whitenoise>=6.11.0",
     "gunicorn>=22.0.0",
     "sentry-sdk[django]>=2.0.0",
+    "PyGithub>=2.0",
 ]
 
 [dependency-groups]
