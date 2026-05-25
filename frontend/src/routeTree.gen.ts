@@ -10,12 +10,18 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as RepoPickerRouteImport } from './routes/repo-picker'
+import { Route as InstallationsRouteImport } from './routes/installations'
 import { Route as ConnectRouteImport } from './routes/connect'
 import { Route as IndexRouteImport } from './routes/index'
 
 const RepoPickerRoute = RepoPickerRouteImport.update({
   id: '/repo-picker',
   path: '/repo-picker',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InstallationsRoute = InstallationsRouteImport.update({
+  id: '/installations',
+  path: '/installations',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ConnectRoute = ConnectRouteImport.update({
@@ -32,30 +38,34 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/connect': typeof ConnectRoute
+  '/installations': typeof InstallationsRoute
   '/repo-picker': typeof RepoPickerRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/connect': typeof ConnectRoute
+  '/installations': typeof InstallationsRoute
   '/repo-picker': typeof RepoPickerRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/connect': typeof ConnectRoute
+  '/installations': typeof InstallationsRoute
   '/repo-picker': typeof RepoPickerRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/connect' | '/repo-picker'
+  fullPaths: '/' | '/connect' | '/installations' | '/repo-picker'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/connect' | '/repo-picker'
-  id: '__root__' | '/' | '/connect' | '/repo-picker'
+  to: '/' | '/connect' | '/installations' | '/repo-picker'
+  id: '__root__' | '/' | '/connect' | '/installations' | '/repo-picker'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ConnectRoute: typeof ConnectRoute
+  InstallationsRoute: typeof InstallationsRoute
   RepoPickerRoute: typeof RepoPickerRoute
 }
 
@@ -66,6 +76,13 @@ declare module '@tanstack/react-router' {
       path: '/repo-picker'
       fullPath: '/repo-picker'
       preLoaderRoute: typeof RepoPickerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/installations': {
+      id: '/installations'
+      path: '/installations'
+      fullPath: '/installations'
+      preLoaderRoute: typeof InstallationsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/connect': {
@@ -88,6 +105,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ConnectRoute: ConnectRoute,
+  InstallationsRoute: InstallationsRoute,
   RepoPickerRoute: RepoPickerRoute,
 }
 export const routeTree = rootRouteImport

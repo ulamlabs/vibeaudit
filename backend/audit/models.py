@@ -13,13 +13,11 @@ class AuditJob(models.Model):
         ("failed", "Failed"),
     ]
 
-    installation_id = models.BigIntegerField(
-        help_text="GitHub App installation ID (stored for audit trail, even after deletion)"
-    )
-    installation_deleted_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="Timestamp when the GitHub App installation was deleted (set after cloning)",
+    installation = models.ForeignKey(
+        "github_app.Installation",
+        on_delete=models.PROTECT,
+        related_name="audit_jobs",
+        help_text="GitHub App installation that initiated this audit",
     )
     repo_full_name = models.CharField(
         max_length=255, help_text="Full repository name (owner/repo)"

@@ -7,6 +7,7 @@ from rest_framework.views import APIView
 
 from audit.models import AuditJob
 from audit.serializers import AuditJobSerializer, StartAuditSerializer
+from github_app.models import Installation
 
 
 class StartAuditView(APIView):
@@ -36,8 +37,16 @@ class StartAuditView(APIView):
         repo_full_name = serializer.validated_data["repo_full_name"]
         email = serializer.validated_data["email"]
 
+        try:
+            installation = Installation.objects.get(
+                installation_id=installation_id,
+                remote_deleted_at__isnull=True,
+            )
+        except Installation.DoesNotExist:
+            return Response({"error": "Installation not found or has been deleted"}, status=401)
+
         audit_job = AuditJob.objects.create(
-            installation_id=installation_id,
+            installation=installation,
             repo_full_name=repo_full_name,
             email=email,
             status="pending",

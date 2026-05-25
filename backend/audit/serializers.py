@@ -15,5 +15,5 @@ class AuditJobSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AuditJob
-        fields = ["id", "repo_full_name", "email", "status", "installation_deleted_at", "created_at"]
-        read_only_fields = ["id", "created_at", "status", "installation_deleted_at"]
+        fields = ["id", "repo_full_name", "email", "status", "created_at"]
+        read_only_fields = ["id", "created_at", "status"]

@@ -4,7 +4,11 @@ GitHub App integration using PyGithub.
 
 import requests
 from django.conf import settings
-from github import Auth, GithubIntegration
+from github import Auth, GithubException, GithubIntegration
+
+
+class InstallationNotFoundError(Exception):
+    """Raised when GitHub reports an installation does not exist (404)."""
 
 
 def get_github_integration() -> GithubIntegration:
@@ -24,12 +28,70 @@ def get_github_integration() -> GithubIntegration:
     return GithubIntegration(auth=auth)
 
 
+def _get_app_jwt() -> str:
+    """Return a short-lived JWT for GitHub App-level API calls."""
+    gi = get_github_integration()
+    return gi.create_jwt(expiration=600)
+
+
+def _app_api_headers() -> dict:
+    return {
+        "Authorization": f"Bearer {_get_app_jwt()}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+
+def get_installation_info(installation_id: int) -> dict:
+    """
+    Fetch account_login and account_type for an installation from the GitHub API.
+    Returns {"account_login": str, "account_type": str}.
+    Raises InstallationNotFoundError if GitHub returns 404.
+    """
+    response = requests.get(
+        f"https://api.github.com/app/installations/{installation_id}",
+        headers=_app_api_headers(),
+        timeout=30,
+    )
+    if response.status_code == 404:
+        raise InstallationNotFoundError(installation_id)
+    response.raise_for_status()
+    data = response.json()
+    account = data.get("account", {})
+    return {
+        "account_login": account.get("login", ""),
+        "account_type": account.get("type", "User"),
+    }
+
+
+def check_installation_active(installation_id: int) -> None:
+    """
+    Verify that a GitHub App installation still exists.
+    Raises InstallationNotFoundError if GitHub returns 404.
+    No database side effects — the caller is responsible for updating remote_deleted_at.
+    """
+    response = requests.get(
+        f"https://api.github.com/app/installations/{installation_id}",
+        headers=_app_api_headers(),
+        timeout=30,
+    )
+    if response.status_code == 404:
+        raise InstallationNotFoundError(installation_id)
+    response.raise_for_status()
+
+
 def get_installation_token(installation_id: int) -> str:
     """
     Get an installation access token for the given installation ID.
+    Raises InstallationNotFoundError if the installation no longer exists on GitHub.
     """
     gi = get_github_integration()
-    token_obj = gi.get_access_token(installation_id)
+    try:
+        token_obj = gi.get_access_token(installation_id)
+    except GithubException as e:
+        if e.status in (401, 404):
+            raise InstallationNotFoundError(installation_id) from e
+        raise
     return token_obj.token
 
 
@@ -48,6 +110,8 @@ def list_repos(installation_id: int) -> list[dict]:
         },
         timeout=30,
     )
+    if response.status_code in (401, 403):
+        raise InstallationNotFoundError(installation_id)
     response.raise_for_status()
     repositories = response.json().get("repositories", [])
 
@@ -67,31 +131,14 @@ def list_repos(installation_id: int) -> list[dict]:
 
 def delete_installation(installation_id: int) -> None:
     """
-    Delete a GitHub App installation.
-    Uses app-level JWT authentication.
+    Delete a GitHub App installation via the GitHub API.
+    Raises InstallationNotFoundError if the installation is already gone (404).
     """
-    gi = get_github_integration()
-
-    # Try to use the internal requester if available
-    try:
-        # This is a bit of a hack, but PyGithub doesn't expose this endpoint directly
-        # We use the internal requester which has the JWT pre-configured
-        gi._Requester__requester.requestJsonAndCheck(
-            "DELETE",
-            f"https://api.github.com/app/installations/{installation_id}",
-        )
-    except (AttributeError, Exception):
-        # Fallback: use integration-generated JWT and call the endpoint directly.
-        token = gi.create_jwt(expiration=600)
-
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        }
-        response = requests.delete(
-            f"https://api.github.com/app/installations/{installation_id}",
-            headers=headers,
-            timeout=30,
-        )
-        response.raise_for_status()
+    response = requests.delete(
+        f"https://api.github.com/app/installations/{installation_id}",
+        headers=_app_api_headers(),
+        timeout=30,
+    )
+    if response.status_code == 404:
+        raise InstallationNotFoundError(installation_id)
+    response.raise_for_status()

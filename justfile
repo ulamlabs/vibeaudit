@@ -37,7 +37,7 @@ i: install
 
 # Run frontend dev server
 dev-fe:
-    cd frontend && pnpm dev
+    cd frontend && npm run dev
 
 # Alias for frontend dev server
 dfe: dev-fe
@@ -56,7 +56,7 @@ test-be:
 
 # Run frontend checks
 test-fe:
-    cd frontend && pnpm typecheck
+    cd frontend && npm run typecheck
 
 # Run all tests
 test: test-be test-fe

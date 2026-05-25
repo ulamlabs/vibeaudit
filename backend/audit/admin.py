@@ -11,14 +11,13 @@ class AuditJobAdmin(ModelAdmin):
         "repo_full_name",
         "email",
         "status",
-        "installation_deleted_at",
+        "installation",
         "created_at",
     ]
     list_filter = ["status"]
     search_fields = ["repo_full_name", "email"]
     readonly_fields = [
-        "installation_id",
-        "installation_deleted_at",
+        "installation",
         "repo_full_name",
         "email",
         "created_at",
@@ -39,8 +38,7 @@ class AuditJobAdmin(ModelAdmin):
             "GitHub Installation",
             {
                 "fields": [
-                    "installation_id",
-                    "installation_deleted_at",
+                    "installation",
                 ],
                 "classes": ["collapse"],
             },

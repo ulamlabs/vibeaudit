@@ -1,8 +1,30 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { useEffect, useState } from 'react'
+import api from '../lib/api'
 
 export const Route = createFileRoute('/connect')({ component: Connect })
 
 function Connect() {
+  const navigate = useNavigate()
+  const [checking, setChecking] = useState(true)
+
+  useEffect(() => {
+    api
+      .get('api/github/installations')
+      .json()
+      .then(() => {
+        navigate({ to: '/installations' })
+      })
+      .catch(() => {
+        // 401 (no session) or 404 (deleted) — stay on this page.
+        setChecking(false)
+      })
+  }, [navigate])
+
+  if (checking) {
+    return <div className="p-8">Checking connection…</div>
+  }
+
   return (
     <div className="p-8 max-w-lg">
       <h1 className="text-3xl font-bold">Connect GitHub Repositories</h1>
