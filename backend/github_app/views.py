@@ -69,13 +69,18 @@ def setup(request: HttpRequest) -> HttpResponse:
     except InstallationNotFoundError:
         return HttpResponse("Installation not found on GitHub", status=400)
 
-    Installation.objects.get_or_create(
+    installation, created = Installation.objects.get_or_create(
         installation_id=installation_id_int,
         defaults={
             "account_login": info["account_login"],
             "account_type": info["account_type"],
         },
     )
+    if not created:
+        installation.reactivate(
+            account_login=info["account_login"],
+            account_type=info["account_type"],
+        )
 
     # Store installation_id in session and consume state (one-time use).
     request.session["installation_id"] = installation_id_int

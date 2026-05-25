@@ -7,6 +7,7 @@ from rest_framework.views import APIView
 
 from audit.models import AuditJob
 from audit.serializers import AuditJobSerializer, StartAuditSerializer
+from github_app.github import InstallationNotFoundError, repo_is_accessible
 from github_app.models import Installation
 
 
@@ -44,6 +45,23 @@ class StartAuditView(APIView):
             )
         except Installation.DoesNotExist:
             return Response({"error": "Installation not found or has been deleted"}, status=401)
+
+        try:
+            repo_allowed = repo_is_accessible(installation.installation_id, repo_full_name)
+        except InstallationNotFoundError:
+            installation.mark_remote_deleted()
+            return Response({"error": "Installation no longer exists on GitHub"}, status=401)
+        except Exception:
+            return Response(
+                {"error": "Failed to validate repository access. Please try again."},
+                status=503,
+            )
+
+        if not repo_allowed:
+            return Response(
+                {"error": "Repository is not accessible to this GitHub installation."},
+                status=400,
+            )
 
         audit_job = AuditJob.objects.create(
             installation=installation,

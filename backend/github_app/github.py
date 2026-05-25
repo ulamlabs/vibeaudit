@@ -89,7 +89,7 @@ def get_installation_token(installation_id: int) -> str:
     try:
         token_obj = gi.get_access_token(installation_id)
     except GithubException as e:
-        if e.status in (401, 404):
+        if e.status == 404:
             raise InstallationNotFoundError(installation_id) from e
         raise
     return token_obj.token
@@ -110,8 +110,6 @@ def list_repos(installation_id: int) -> list[dict]:
         },
         timeout=30,
     )
-    if response.status_code in (401, 403):
-        raise InstallationNotFoundError(installation_id)
     response.raise_for_status()
     repositories = response.json().get("repositories", [])
 
@@ -127,6 +125,28 @@ def list_repos(installation_id: int) -> list[dict]:
         )
 
     return repos
+
+
+def repo_is_accessible(installation_id: int, repo_full_name: str) -> bool:
+    """
+    Check whether the installation can access the given repository.
+    Returns False when the repository does not exist or is not granted to the installation.
+    Raises InstallationNotFoundError if the installation no longer exists on GitHub.
+    """
+    token = get_installation_token(installation_id)
+    response = requests.get(
+        f"https://api.github.com/repos/{repo_full_name}",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+        timeout=30,
+    )
+    if response.status_code == 404:
+        return False
+    response.raise_for_status()
+    return True
 
 
 def delete_installation(installation_id: int) -> None:

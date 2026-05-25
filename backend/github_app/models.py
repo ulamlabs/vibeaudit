@@ -47,6 +47,13 @@ class Installation(models.Model):
         self.remote_deleted_at = timezone.now()
         self.save(update_fields=["remote_deleted_at"])
 
+    def reactivate(self, *, account_login: str, account_type: str) -> None:
+        """Refresh local metadata for an active installation seen again on GitHub."""
+        self.account_login = account_login
+        self.account_type = account_type
+        self.remote_deleted_at = None
+        self.save(update_fields=["account_login", "account_type", "remote_deleted_at"])
+
     def uninstall(self) -> None:
         """
         Delete the installation from GitHub and mark it as remote-deleted locally.
