@@ -1,6 +1,8 @@
 """
 Audit job views.
 """
+
+from django.shortcuts import get_object_or_404
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -35,13 +37,11 @@ class StartAuditView(APIView):
         repo_full_name = serializer.validated_data["repo_full_name"]
         email = serializer.validated_data["email"]
 
-        try:
-            installation = Installation.objects.get(
-                installation_id=installation_id,
-                remote_deleted_at__isnull=True,
-            )
-        except Installation.DoesNotExist:
-            return Response({"error": "Installation not found or has been deleted"}, status=401)
+        installation = get_object_or_404(
+            Installation,
+            installation_id=installation_id,
+            remote_deleted_at__isnull=True,
+        )
 
         try:
             repo_allowed = repo_is_accessible(installation.installation_id, repo_full_name)
