@@ -9,6 +9,8 @@ from django.shortcuts import redirect
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from audit.authentication import AuditAuthentication
+
 from github_app.github import (
     InstallationNotFoundError,
     check_installation_active,
@@ -98,6 +100,8 @@ class InstallationsView(APIView):
     Lazily marks remote_deleted_at if GitHub reports the installation is gone.
     """
 
+    authentication_classes = [AuditAuthentication]
+
     def get(self, request):
         installation_id = request.session.get("installation_id")
         if not installation_id:
@@ -136,6 +140,8 @@ class InstallationDeleteView(APIView):
     DELETE /api/github/installations/<installation_id> — uninstall and soft-delete.
     """
 
+    authentication_classes = [AuditAuthentication]
+
     def delete(self, request, installation_id: int):
         session_installation_id = request.session.get("installation_id")
         if not session_installation_id:
@@ -173,6 +179,8 @@ class ReposView(APIView):
     List repositories accessible to the currently installed GitHub App.
     Requires installation_id in session.
     """
+
+    authentication_classes = [AuditAuthentication]
 
     def get(self, request):
         installation_id = request.session.get("installation_id")

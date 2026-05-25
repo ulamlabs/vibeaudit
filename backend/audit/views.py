@@ -1,10 +1,10 @@
 """
 Audit job views.
 """
-from django.conf import settings
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from audit.authentication import AuditAuthentication
 from audit.models import AuditJob
 from audit.serializers import AuditJobSerializer, StartAuditSerializer
 from github_app.github import InstallationNotFoundError, repo_is_accessible
@@ -18,16 +18,13 @@ class StartAuditView(APIView):
     If ALLOW_ANONYMOUS_AUDIT is False, requires authenticated user.
     """
 
+    authentication_classes = [AuditAuthentication]
+
     def post(self, request):
         # Check if installation_id is in session
         installation_id = request.session.get("installation_id")
         if not installation_id:
             return Response({"error": "Not authorized"}, status=401)
-
-        # Check if user auth is required
-        if not settings.ALLOW_ANONYMOUS_AUDIT:
-            if not request.user.is_authenticated:
-                return Response({"error": "Authentication required"}, status=403)
 
         # Validate request body
         serializer = StartAuditSerializer(data=request.data)
