@@ -49,7 +49,7 @@ class StartAuditView(APIView):
             installation=installation,
             repo_full_name=repo_full_name,
             email=email,
-            status="pending",
+            state=AuditJob.State.PENDING,
         )
 
         # Return the created job

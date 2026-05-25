@@ -10,11 +10,11 @@ class AuditJobAdmin(ModelAdmin):
         "id",
         "repo_full_name",
         "email",
-        "status",
+        "state",
         "installation",
         "created_at",
     ]
-    list_filter = ["status"]
+    list_filter = ["state"]
     search_fields = ["repo_full_name", "email"]
     readonly_fields = [
         "installation",
@@ -29,7 +29,7 @@ class AuditJobAdmin(ModelAdmin):
                 "fields": [
                     "repo_full_name",
                     "email",
-                    "status",
+                    "state",
                     "created_at",
                 ]
             },

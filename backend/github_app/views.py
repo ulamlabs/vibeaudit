@@ -117,7 +117,7 @@ class InstallationsView(APIView):
             pass
 
         has_active_jobs = installation.audit_jobs.filter(
-            status__in=["pending", "cloning", "running"]
+            state__in=["pending", "cloning", "running"]
         ).exists()
 
         serializer = InstallationSerializer(
@@ -146,7 +146,7 @@ class InstallationDeleteView(APIView):
 
         # Block if active jobs are in progress.
         active_jobs = installation.audit_jobs.filter(
-            status__in=["pending", "cloning", "running"]
+            state__in=["pending", "cloning", "running"]
         ).exists()
         if active_jobs:
             return Response(
