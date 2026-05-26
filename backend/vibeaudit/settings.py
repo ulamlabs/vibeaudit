@@ -122,6 +122,17 @@ else:
     }
     SESSION_ENGINE = "django.contrib.sessions.backends.db"
 
+# Celery — only configured when Redis is available
+if REDIS_URL:
+    CELERY_BROKER_URL = REDIS_URL
+    CELERY_RESULT_BACKEND = REDIS_URL
+    CELERY_ACCEPT_CONTENT = ["json"]
+    CELERY_TASK_SERIALIZER = "json"
+    CELERY_RESULT_SERIALIZER = "json"
+
+# Repo clone storage — override with EBS mount path in production
+REPOS_DIR = Path(env("REPOS_DIR", default=str(BASE_DIR / "repos")))
+
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators

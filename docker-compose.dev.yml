@@ -1,0 +1,93 @@
+services:
+  traefik:
+    image: traefik:v3
+    command:
+      - --api.insecure=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:3000
+    ports:
+      - "3000:3000"
+      - "8081:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: vibeaudit
+      POSTGRES_USER: vibeaudit
+      POSTGRES_PASSWORD: vibeaudit
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev.backend
+    volumes:
+      - ./backend:/app
+      - repos:/repos
+    environment:
+      DEBUG: "true"
+      SECRET_KEY: devonly-changeme
+      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgres://vibeaudit:vibeaudit@db:5432/vibeaudit
+      REPOS_DIR: /repos
+      ALLOW_UNAUTHENTICATED_AUDIT: "true"
+      GITHUB_APP_PRIVATE_KEY_PATH: /app/secrets/github-app.pem
+    ports:
+      - "8000:8000"
+    labels:
+      - "traefik.enable=true"
+      # we forward via traefik only /api so that it can be tested with ngrok. for /admin access service directly.
+      - "traefik.http.routers.backend.rule=PathPrefix(`/api`)"
+      - "traefik.http.services.backend.loadbalancer.server.port=8000"
+    depends_on:
+      - db
+      - redis
+
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev.backend
+    command: ["celery", "-A", "vibeaudit", "worker", "--loglevel=info"]
+    volumes:
+      - ./backend:/app
+      - repos:/repos
+    environment:
+      DEBUG: "true"
+      SECRET_KEY: devonly-changeme
+      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgres://vibeaudit:vibeaudit@db:5432/vibeaudit
+      REPOS_DIR: /repos
+    depends_on:
+      - db
+      - redis
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev.frontend
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3001"]
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.frontend.priority=1"
+      - "traefik.http.services.frontend.loadbalancer.server.port=3001"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  repos:

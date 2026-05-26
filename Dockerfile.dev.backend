@@ -1,0 +1,14 @@
+FROM ghcr.io/astral-sh/uv:python3.13-alpine
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    UV_PROJECT_ENVIRONMENT=/usr/local/
+
+WORKDIR /app
+
+RUN apk add --no-cache git
+
+COPY backend/pyproject.toml backend/uv.lock ./
+RUN uv sync --locked --no-dev
+
+CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]

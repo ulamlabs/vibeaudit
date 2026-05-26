@@ -9,6 +9,7 @@ from rest_framework.views import APIView
 from audit.authentication import AuditAuthentication
 from audit.models import AuditJob
 from audit.serializers import AuditJobSerializer, StartAuditSerializer
+from audit.tasks import clone_repo
 from github_app.github import InstallationNotFoundError, repo_is_accessible
 from github_app.models import Installation
 
@@ -67,6 +68,7 @@ class StartAuditView(APIView):
             state=AuditJob.State.PENDING,
         )
 
-        # Return the created job
+        clone_repo.delay(audit_job.pk)
+
         output_serializer = AuditJobSerializer(audit_job)
         return Response(output_serializer.data, status=201)

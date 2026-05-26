@@ -54,13 +54,17 @@ class Installation(models.Model):
         self.remote_deleted_at = None
         self.save(update_fields=["account_login", "account_type", "remote_deleted_at"])
 
-    def uninstall(self) -> None:
-        """
-        Delete the installation from GitHub and mark it as remote-deleted locally.
-        Safe to call if the installation is already gone from GitHub.
-        """
+    def delete(self, *args, **kwargs):
         try:
             delete_installation(self.installation_id)
         except InstallationNotFoundError:
-            pass  # Already gone — still record it locally.
+            pass
+        super().delete(*args, **kwargs)
+
+    def uninstall(self) -> None:
+        """Delete the installation from GitHub and mark it as remote-deleted locally."""
+        try:
+            delete_installation(self.installation_id)
+        except InstallationNotFoundError:
+            pass
         self.mark_remote_deleted()

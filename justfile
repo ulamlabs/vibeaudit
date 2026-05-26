@@ -46,6 +46,32 @@ dfe: dev-fe
 run:
     docker run --rm -p 8080:8080 {{ image_ref }}
 
+# Start dev environment via Docker Compose (build if needed)
+dc-up:
+    docker compose -f docker-compose.dev.yml up --build
+
+# Alias for dc-up
+dcu: dc-up
+
+# Stop dev environment
+dc-down:
+    docker compose -f docker-compose.dev.yml down
+
+# Alias for dc-down
+dcd: dc-down
+
+# Build dev Docker images without starting
+dc-build:
+    docker compose -f docker-compose.dev.yml build
+
+# Run Django migrations inside the running backend container
+dc-migrate:
+    docker compose -f docker-compose.dev.yml exec backend python manage.py migrate --noinput
+
+# Open a bash shell inside the running backend container
+dc-shell:
+    docker compose -f docker-compose.dev.yml exec backend sh
+
 # Run Django migrations
 migrate:
     cd backend && uv run python manage.py migrate
