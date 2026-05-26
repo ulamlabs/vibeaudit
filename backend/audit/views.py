@@ -17,7 +17,7 @@ class StartAuditView(APIView):
     """
     Start a new audit job for a repository.
     Requires installation_id in session.
-    If ALLOW_ANONYMOUS_AUDIT is False, requires authenticated user.
+    If ALLOW_UNAUTHENTICATED_AUDIT is False, requires authenticated user.
     """
 
     authentication_classes = [AuditAuthentication]

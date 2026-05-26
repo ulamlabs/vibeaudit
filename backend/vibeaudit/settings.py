@@ -202,7 +202,7 @@ else:
         "\\n", "\n"
     )
 GITHUB_APP_SLUG = env("GITHUB_APP_SLUG", default="vibeaudit")
-ALLOW_ANONYMOUS_AUDIT = env.bool("ALLOW_ANONYMOUS_AUDIT", default=False)
+ALLOW_UNAUTHENTICATED_AUDIT = env.bool("ALLOW_UNAUTHENTICATED_AUDIT", default=False)
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field

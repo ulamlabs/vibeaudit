@@ -4,14 +4,10 @@ from rest_framework.authentication import SessionAuthentication
 
 
 class AuditAuthentication(SessionAuthentication):
-    """Require an authenticated session unless anonymous audits are enabled."""
+    """Enforce session authentication unless unauthenticated audits are allowed."""
 
     def authenticate(self, request):
-        if settings.ALLOW_ANONYMOUS_AUDIT:
-            return None
-
         user_auth_tuple = super().authenticate(request)
-        if user_auth_tuple is None:
+        if user_auth_tuple is None and not settings.ALLOW_UNAUTHENTICATED_AUDIT:
             raise exceptions.NotAuthenticated("Authentication required")
-
         return user_auth_tuple

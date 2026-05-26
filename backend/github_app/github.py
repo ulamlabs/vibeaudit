@@ -6,6 +6,8 @@ import requests
 from django.conf import settings
 from github import Auth, GithubException, GithubIntegration
 
+from github_app.types import InstallationInfo, RepoInfo
+
 
 class InstallationNotFoundError(Exception):
     """Raised when GitHub reports an installation does not exist (404)."""
@@ -42,10 +44,9 @@ def _app_api_headers() -> dict:
     }
 
 
-def get_installation_info(installation_id: int) -> dict:
+def get_installation_info(installation_id: int) -> InstallationInfo:
     """
     Fetch account_login and account_type for an installation from the GitHub API.
-    Returns {"account_login": str, "account_type": str}.
     Raises InstallationNotFoundError if GitHub returns 404.
     """
     response = requests.get(
@@ -58,10 +59,10 @@ def get_installation_info(installation_id: int) -> dict:
     response.raise_for_status()
     data = response.json()
     account = data.get("account", {})
-    return {
-        "account_login": account.get("login", ""),
-        "account_type": account.get("type", "User"),
-    }
+    return InstallationInfo(
+        account_login=account.get("login", ""),
+        account_type=account.get("type", "User"),
+    )
 
 
 def check_installation_active(installation_id: int) -> None:
@@ -95,10 +96,9 @@ def get_installation_token(installation_id: int) -> str:
     return token_obj.token
 
 
-def list_repos(installation_id: int) -> list[dict]:
+def list_repos(installation_id: int) -> list[RepoInfo]:
     """
     List all repositories accessible to the given installation.
-    Returns a list of dicts with keys: id, full_name, private, description.
     """
     token = get_installation_token(installation_id)
     response = requests.get(
@@ -113,18 +113,15 @@ def list_repos(installation_id: int) -> list[dict]:
     response.raise_for_status()
     repositories = response.json().get("repositories", [])
 
-    repos = []
-    for repo in repositories:
-        repos.append(
-            {
-                "id": repo.get("id"),
-                "full_name": repo.get("full_name", ""),
-                "private": repo.get("private", False),
-                "description": repo.get("description") or "",
-            }
+    return [
+        RepoInfo(
+            id=repo.get("id"),
+            full_name=repo.get("full_name", ""),
+            private=repo.get("private", False),
+            description=repo.get("description") or "",
         )
-
-    return repos
+        for repo in repositories
+    ]
 
 
 def repo_is_accessible(installation_id: int, repo_full_name: str) -> bool:
