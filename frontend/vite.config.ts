@@ -7,13 +7,17 @@ import viteReact from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 const config = defineConfig({
-  resolve: { tsconfigPaths: true },
-  plugins: [
-    devtools(),
-    tailwindcss(),
-    tanstackRouter({ target: 'react', autoCodeSplitting: true }),
-    viteReact(),
-  ],
+    base: '/',
+    build: {
+      assetsDir: 'static',
+    },
+    resolve: { tsconfigPaths: true },
+    plugins: [
+      devtools(),
+      tailwindcss(),
+      tanstackRouter({ target: 'react', autoCodeSplitting: true }),
+      viteReact(),
+    ],
 })
 
 export default config

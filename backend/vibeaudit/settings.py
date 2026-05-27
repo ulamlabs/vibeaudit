@@ -14,12 +14,19 @@ import secrets
 from pathlib import Path
 
 import environ
+import sentry_sdk
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 env = environ.Env()
 environ.Env.read_env(BASE_DIR / ".env")
+
+BACKEND_SENTRY_DSN = env("BACKEND_SENTRY_DSN", default="")
+if BACKEND_SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=BACKEND_SENTRY_DSN,
+    )
 
 
 
@@ -65,10 +72,13 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "vibeaudit.urls"
 
+FRONTEND_TEMPLATE_DIR = BASE_DIR / "vibeaudit" / "templates"
+FRONTEND_STATIC_DIR = BASE_DIR / "vibeaudit" / "static"
+
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [BASE_DIR / "vibeaudit" / "static"],
+        "DIRS": [FRONTEND_TEMPLATE_DIR],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -146,7 +156,7 @@ USE_TZ = True
 
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-STATICFILES_DIRS = [BASE_DIR / "vibeaudit" / "static"]
+STATICFILES_DIRS = [FRONTEND_STATIC_DIR]
 
 STORAGES = {
     "default": {
