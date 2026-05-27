@@ -91,7 +91,7 @@ def test_repo_not_accessible_returns_400(installation):
 def test_installation_gone_on_github_returns_401_and_marks_deleted(installation):
     client = client_with_session(installation.installation_id)
     with patch(
-        "github_app.github.repo_is_accessible",
+        "audit.views.repo_is_accessible",
         side_effect=InstallationNotFoundError(installation.installation_id),
     ):
         response = client.post(START_URL, VALID_PAYLOAD, format="json")
