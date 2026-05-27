@@ -19,7 +19,7 @@ from django.contrib import admin
 from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 from django.http import Http404
 from django.template import TemplateDoesNotExist
-from django.urls import path, re_path
+from django.urls import include, path, re_path
 from django.views.generic import TemplateView
 
 from vibeaudit.views import healthcheck
@@ -45,6 +45,8 @@ class SafeTemplateView(TemplateView):
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/healthz", healthcheck, name="healthz"),
+    path("api/github/", include("github_app.urls")),
+    path("api/audit/", include("audit.urls")),
 ]
 
 # Serve static files (WhiteNoise handles this efficiently in production)

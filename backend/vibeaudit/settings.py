@@ -43,6 +43,7 @@ else:
 
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
+CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 
 
 # Application definition
@@ -57,6 +58,8 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "anymail",
     "rest_framework",
+    "github_app",
+    "audit",
 ]
 
 MIDDLEWARE = [
@@ -188,6 +191,18 @@ UNFOLD = {
     "SITE_HEADER": env("ADMIN_SITE_HEADER", default="VibeAudit Admin"),
     "SITE_SUBHEADER": env("ADMIN_SITE_SUBHEADER", default="Administration"),
 }
+
+# GitHub App settings
+GITHUB_APP_ID = env.int("GITHUB_APP_ID", default=0)
+GITHUB_APP_PRIVATE_KEY_PATH = env("GITHUB_APP_PRIVATE_KEY_PATH", default="")
+if GITHUB_APP_PRIVATE_KEY_PATH and Path(GITHUB_APP_PRIVATE_KEY_PATH).exists():
+    GITHUB_APP_PRIVATE_KEY = Path(GITHUB_APP_PRIVATE_KEY_PATH).read_text()
+else:
+    GITHUB_APP_PRIVATE_KEY = env("GITHUB_APP_PRIVATE_KEY", default="").replace(
+        "\\n", "\n"
+    )
+GITHUB_APP_SLUG = env("GITHUB_APP_SLUG", default="vibeaudit")
+ALLOW_UNAUTHENTICATED_AUDIT = env.bool("ALLOW_UNAUTHENTICATED_AUDIT", default=False)
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field

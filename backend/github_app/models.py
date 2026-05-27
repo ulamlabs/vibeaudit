@@ -1,0 +1,66 @@
+from django.db import models
+
+from github_app.github import InstallationNotFoundError, delete_installation
+
+
+class Installation(models.Model):
+    """Permanent record of a GitHub App installation."""
+
+    ACCOUNT_TYPE_CHOICES = [
+        ("User", "User"),
+        ("Organization", "Organization"),
+    ]
+
+    installation_id = models.BigIntegerField(
+        unique=True,
+        help_text="GitHub's installation ID",
+    )
+    account_login = models.CharField(
+        max_length=255,
+        help_text="GitHub username or organisation name",
+    )
+    account_type = models.CharField(
+        max_length=50,
+        choices=ACCOUNT_TYPE_CHOICES,
+        help_text="'User' or 'Organization'",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    remote_deleted_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Set when GitHub confirms the installation no longer exists",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Installation #{self.installation_id} ({self.account_login})"
+
+    @property
+    def is_active(self) -> bool:
+        return self.remote_deleted_at is None
+
+    def mark_remote_deleted(self) -> None:
+        """Mark the installation as no longer existing on GitHub."""
+        from django.utils import timezone
+        self.remote_deleted_at = timezone.now()
+        self.save(update_fields=["remote_deleted_at"])
+
+    def reactivate(self, *, account_login: str, account_type: str) -> None:
+        """Refresh local metadata for an active installation seen again on GitHub."""
+        self.account_login = account_login
+        self.account_type = account_type
+        self.remote_deleted_at = None
+        self.save(update_fields=["account_login", "account_type", "remote_deleted_at"])
+
+    def uninstall(self) -> None:
+        """
+        Delete the installation from GitHub and mark it as remote-deleted locally.
+        Safe to call if the installation is already gone from GitHub.
+        """
+        try:
+            delete_installation(self.installation_id)
+        except InstallationNotFoundError:
+            pass  # Already gone — still record it locally.
+        self.mark_remote_deleted()
