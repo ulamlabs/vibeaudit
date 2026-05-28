@@ -22,6 +22,8 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+RUN apk add --no-cache git
+
 # Install only third-party backend dependencies with lockfile in the cacheable layer.
 COPY backend/pyproject.toml backend/uv.lock ./
 RUN uv sync --locked --no-dev --no-install-project
