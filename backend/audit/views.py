@@ -1,12 +1,12 @@
-"""
-Audit job views.
-"""
+import logging
 
 from django.shortcuts import get_object_or_404
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from audit.authentication import AuditAuthentication
+
+logger = logging.getLogger(__name__)
 from audit.models import AuditJob
 from audit.serializers import AuditJobSerializer, StartAuditSerializer
 from audit.tasks import clone_repo
@@ -50,6 +50,7 @@ class StartAuditView(APIView):
             installation.mark_remote_deleted()
             return Response({"error": "Installation no longer exists on GitHub"}, status=401)
         except Exception:
+            logger.exception("Unexpected error checking repo access for %s", repo_full_name)
             return Response(
                 {"error": "Failed to validate repository access. Please try again."},
                 status=503,

@@ -5,7 +5,6 @@ from unfold.admin import ModelAdmin
 from unfold.decorators import action
 
 from audit.models import AuditJob
-from audit.services import approve_job, reject_job
 
 
 @admin.register(AuditJob)
@@ -62,7 +61,7 @@ class AuditJobAdmin(ModelAdmin):
     def approve_job(self, request, object_id):
         job = AuditJob.objects.get(pk=object_id)
         try:
-            approve_job(job)
+            job.approve()
         except ValueError as e:
             self.message_user(request, str(e), messages.ERROR)
         else:
@@ -73,7 +72,7 @@ class AuditJobAdmin(ModelAdmin):
     def reject_job(self, request, object_id):
         job = AuditJob.objects.get(pk=object_id)
         try:
-            reject_job(job)
+            job.reject()
         except ValueError as e:
             self.message_user(request, str(e), messages.ERROR)
         else:
@@ -85,7 +84,7 @@ class AuditJobAdmin(ModelAdmin):
         rejected = skipped = 0
         for job in queryset:
             try:
-                reject_job(job)
+                job.reject()
                 rejected += 1
             except ValueError:
                 skipped += 1

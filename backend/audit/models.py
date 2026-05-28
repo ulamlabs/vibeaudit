@@ -19,7 +19,11 @@ class AuditJob(models.Model):
         REJECTED = "rejected", "Rejected"
         CANCELED = "canceled", "Canceled"
 
+    ACTIVE_STATES = [State.PENDING, State.CLONING, State.RUNNING]
+
     VALID_TRANSITIONS: dict[str, list[str]] = {
+        State.PENDING: [State.CLONING],
+        State.CLONING: [State.AWAITING_APPROVAL, State.FAILED],
         State.AWAITING_APPROVAL: [State.QUEUED, State.REJECTED],
         State.QUEUED: [State.RUNNING],
         State.RUNNING: [State.COMPLETED, State.FAILED],
@@ -68,10 +72,16 @@ class AuditJob(models.Model):
         shutil.rmtree(self.job_dir, ignore_errors=True)
 
     def approve(self) -> None:
+        from audit.tasks import run_audit  
+
         self.transition_to(self.State.QUEUED)
+        run_audit.delay(self.pk)
 
     def reject(self) -> None:
+        from audit.tasks import cleanup_job_dir  
+
         self.transition_to(self.State.REJECTED)
+        cleanup_job_dir.delay(self.pk)
 
     def __str__(self):
         return f"AuditJob #{self.pk} ({self.repo_full_name} - {self.state})"

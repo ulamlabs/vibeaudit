@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib import admin, messages
 from django.shortcuts import redirect
 from django.urls import reverse
@@ -6,6 +8,8 @@ from unfold.decorators import action
 
 from github_app.github import InstallationNotFoundError, check_installation_active
 from github_app.models import Installation
+
+logger = logging.getLogger(__name__)
 
 
 @admin.action(description="Remote delete selected installations (uninstalls from GitHub)")
@@ -22,7 +26,7 @@ def verify_with_github_bulk(modeladmin, request, queryset):
         except InstallationNotFoundError:
             installation.mark_remote_deleted()
         except Exception:
-            pass  # Network errors — skip silently
+            logger.exception("Failed to verify installation %s with GitHub", installation.installation_id)
 
 
 @admin.register(Installation)

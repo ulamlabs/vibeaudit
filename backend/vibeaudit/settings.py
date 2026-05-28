@@ -29,7 +29,6 @@ if BACKEND_SENTRY_DSN:
     )
 
 
-
 DEBUG = env.bool("DEBUG", default=False)
 
 if DEBUG:
