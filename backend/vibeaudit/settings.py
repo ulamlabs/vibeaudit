@@ -121,6 +121,8 @@ else:
         }
     }
     SESSION_ENGINE = "django.contrib.sessions.backends.db"
+    CELERY_TASK_ALWAYS_EAGER = True
+    CELERY_TASK_EAGER_PROPAGATES = True
 
 # Celery — only configured when Redis is available
 if REDIS_URL:
