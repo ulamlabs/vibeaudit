@@ -38,7 +38,7 @@ COPY --from=frontend-build /frontend/dist/index.html ./vibeaudit/templates/index
 COPY --from=frontend-build /frontend/dist/static/. ./vibeaudit/static/
 
 # Runtime entrypoint.
-COPY deploy/entrypoint.sh /entrypoint.sh
+COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Collect static files for WhiteNoise.

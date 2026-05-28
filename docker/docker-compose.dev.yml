@@ -31,7 +31,7 @@ services:
   backend:
     build:
       context: .
-      dockerfile: Dockerfile.dev.backend
+      dockerfile: docker/Dockerfile.dev.backend
     volumes:
       - ./backend:/app
       - repos:/repos
@@ -57,7 +57,7 @@ services:
   celery-worker:
     build:
       context: .
-      dockerfile: Dockerfile.dev.backend
+      dockerfile: docker/Dockerfile.dev.backend
     command: ["celery", "-A", "vibeaudit", "worker", "--loglevel=info"]
     volumes:
       - ./backend:/app
