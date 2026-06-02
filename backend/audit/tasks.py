@@ -1,5 +1,3 @@
-import time
-
 import git
 from celery import shared_task
 
@@ -28,15 +26,22 @@ def clone_repo(job_id: int) -> None:
 
 @shared_task
 def run_audit(job_id: int) -> None:
+    from audit.ai.pipeline import report_to_markdown, run_pipeline
+    from audit.ai.report.typst_builder import build_pdf
+
     job = AuditJob.objects.get(pk=job_id)
     job.transition_to(AuditJob.State.RUNNING)
 
     try:
-        # TODO: replace with real audit logic
-        time.sleep(5)
-        job.report = "Yey!"
+        report = run_pipeline(job)
+        build_pdf(report, job.job_dir / "report.pdf")
+        (job.job_dir / "report.md").write_text(report_to_markdown(report))
+        job.report = report.model_dump_json()
         job.save(update_fields=["report"])
         job.transition_to(AuditJob.State.COMPLETED)
+    except Exception:
+        job.transition_to(AuditJob.State.FAILED)
+        raise
     finally:
         # Always clean up the clone regardless of outcome — report is persisted to DB above.
         cleanup_job_dir.delay(job_id)

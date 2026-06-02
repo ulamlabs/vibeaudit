@@ -216,6 +216,26 @@ else:
 GITHUB_APP_SLUG = env("GITHUB_APP_SLUG", default="vibeaudit")
 ALLOW_UNAUTHENTICATED_AUDIT = env.bool("ALLOW_UNAUTHENTICATED_AUDIT", default=False)
 
+# AI / LLM settings
+AI_MODEL_PROVIDER = env("AI_MODEL_PROVIDER", default="ollama")  # "ollama" | "anthropic" | "openai" | …
+AI_MODEL_NAME = env("AI_MODEL_NAME", default="qwen2.5:7b")
+AI_OLLAMA_BASE_URL = env("AI_OLLAMA_BASE_URL", default="http://localhost:11434")
+AI_OLLAMA_NUM_CTX = env.int("AI_OLLAMA_NUM_CTX", default=8192)
+AI_ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY", default="")
+# Requests per second passed to InMemoryRateLimiter.
+# NOTE: this limits requests/s, NOT tokens/minute. It won't reliably prevent
+# Anthropic 429s caused by the tokens-per-minute cap. Use AI_MAX_TOKENS to
+# reduce token usage instead.
+# 0 disables rate limiting.
+AI_REQUESTS_PER_SECOND = env.float("AI_REQUESTS_PER_SECOND", default=0)
+# Hard cap on output tokens per LLM call. Helps stay within tokens/min quota.
+# 0 = use provider default (no explicit cap).
+AI_MAX_TOKENS = env.int("AI_MAX_TOKENS", default=0)
+
+# Audit sandbox backend: "local" uses FilesystemBackend (read-only VFS), "modal" for cloud sandboxing
+AUDIT_SANDBOX_BACKEND = env("AUDIT_SANDBOX_BACKEND", default="local")
+
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 

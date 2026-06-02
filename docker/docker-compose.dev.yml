@@ -43,6 +43,7 @@ services:
       REPOS_DIR: /repos
       ALLOW_UNAUTHENTICATED_AUDIT: "true"
       GITHUB_APP_PRIVATE_KEY_PATH: /app/secrets/github-app.pem
+      AI_OLLAMA_BASE_URL: ${AI_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
     ports:
       - "8000:8000"
     labels:
@@ -68,6 +69,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       DATABASE_URL: postgres://vibeaudit:vibeaudit@db:5432/vibeaudit
       REPOS_DIR: /repos
+      AI_OLLAMA_BASE_URL: ${AI_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
     depends_on:
       - db
       - redis

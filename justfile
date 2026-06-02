@@ -61,7 +61,7 @@ dc-migrate:
 
 # Open a bash shell inside the running backend container
 dc-shell:
-    docker compose -f docker/docker-compose.dev.yml exec backend sh
+    docker compose -f docker/docker-compose.dev.yml exec backend bash
 
 # Run Django migrations
 migrate:
