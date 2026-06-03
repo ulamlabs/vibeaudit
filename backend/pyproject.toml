@@ -22,6 +22,8 @@ dependencies = [
     "pypandoc-binary>=1.13",
     "pydantic>=2.13.4",
     "typst>=0.14.9",
+    "nh3>=0.3.5",
+    "markdown-it-py>=4.2.0",
 ]
 
 [dependency-groups]

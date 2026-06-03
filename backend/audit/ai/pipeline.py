@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -13,28 +14,28 @@ from deepagents.backends import CompositeBackend, FilesystemBackend, StateBacken
 from django.conf import settings
 from langchain_core.tools import tool
 
-from audit.ai.agents import get_audit_agents
 from audit.ai.model import get_llm
 from audit.ai.output import PipelineReport
+from audit.ai.prompts import (
+    ORCHESTRATOR_SYSTEM_PROMPT,
+    ORCHESTRATOR_TASK_INSTRUCTIONS,
+    SPECIALIST_SYSTEM_PROMPT_PREFIX,
+)
 
 logger = logging.getLogger(__name__)
 
-ORCHESTRATOR_SYSTEM_PROMPT = """\
-You are an automated code auditor coordinating specialist subagents.
-This is NOT an interactive session — no human will answer questions.
 
-The repository is at /workspace/. Use subagents for deep analysis and synthesize one
-coherent report. Do not ask follow-up questions.
+@dataclass(frozen=True)
+class AgentOutputCapture:
+    agent_id: str
+    output: str
 
-When synthesis is complete you MUST call the `submit_report` tool exactly once. Do not
-put the report in a normal message — only `submit_report` records it. Provide:
-- risk_level: overall risk, one of critical/high/medium/low/info.
-- summary: a single executive paragraph spanning all findings.
-- markdown: the full report BODY as markdown (content sections only; do NOT include a
-  top-level document title — that is added separately). No markdown code fences.
 
-Only report what was observed in the repository or specialist outputs.
-"""
+@dataclass(frozen=True)
+class PipelineResult:
+    report: PipelineReport
+    agent_outputs: list[AgentOutputCapture]
+
 
 _ORCHESTRATOR_PROFILE = HarnessProfile(
     general_purpose_subagent=GeneralPurposeSubagentProfile(enabled=False),
@@ -68,11 +69,7 @@ class AgentOutputError(Exception):
 
 
 def _make_backend(repo_path: Path) -> CompositeBackend:
-    backend_type = getattr(settings, "AUDIT_SANDBOX_BACKEND", "local")
-    if backend_type == "modal":
-        raise NotImplementedError("Modal sandbox not yet configured")
-    # Route /workspace/ to the real repo (read-only via virtual_mode); keep agent internals
-    # (offloaded tool results, conversation history) in ephemeral StateBackend.
+    # Virtual read-only access to repo; agent internals use ephemeral StateBackend
     return CompositeBackend(
         default=StateBackend(),
         routes={"/workspace/": FilesystemBackend(root_dir=str(repo_path), virtual_mode=True)},
@@ -87,11 +84,7 @@ def _build_specialist_subagents(agents) -> list[SubAgent]:
                 "name": agent.id,
                 "description": agent.description,
                 "system_prompt": (
-                    "You are a specialist technical auditor. "
-                    "Analyze the repository at /workspace/ and return only concise markdown. "
-                    "Do not return JSON. Do not use markdown code fences. "
-                    "Use explicit headings requested in the task and keep findings evidence-based.\n\n"
-                    f"Focus area:\n{agent.prompt}"
+                    f"{SPECIALIST_SYSTEM_PROMPT_PREFIX}\n\nFocus area:\n{agent.prompt}"
                 ),
             }
         )
@@ -100,19 +93,12 @@ def _build_specialist_subagents(agents) -> list[SubAgent]:
 
 def _build_orchestrator_prompt(agents) -> str:
     subagent_list = "\n".join(f"- {a.id}: {a.description}" for a in agents)
-    return (
-        "Run exactly one task call for each specialist subagent listed below and gather "
-        "their outputs.\n"
-        "Then synthesize a single coherent report with no duplication, keeping the most "
-        "concrete, evidence-backed version of each point.\n"
-        "Finally, call submit_report exactly once.\n\n"
-        "Specialist subagents:\n"
-        f"{subagent_list}"
-    )
+    return f"{ORCHESTRATOR_TASK_INSTRUCTIONS}{subagent_list}"
 
 
-def _make_submit_report_tool(holder: dict):
-    """Build a one-shot tool that records the orchestrator's final report into `holder`."""
+def _make_submit_report_tool(submitted_report: dict):
+    """Build a one-shot tool that records the orchestrator's final report into
+    `submitted_report`."""
 
     @tool
     def submit_report(risk_level: str, summary: str, markdown: str) -> str:
@@ -123,52 +109,97 @@ def _make_submit_report_tool(holder: dict):
             summary: one executive paragraph spanning all findings.
             markdown: the full report body as markdown (content only, no top-level title).
         """
-        if holder:
+        if submitted_report:
             logger.warning("submit_report called more than once; ignoring duplicate call")
             return "Report already submitted — ignoring duplicate call."
-        holder["risk_level"] = risk_level
-        holder["summary"] = summary
-        holder["markdown"] = markdown
+        submitted_report["risk_level"] = risk_level
+        submitted_report["summary"] = summary
+        submitted_report["markdown"] = markdown
         return "Report submitted."
 
     return submit_report
 
 
-def _run_orchestrator(repo_path: Path) -> dict:
+def _message_text(content) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, dict):
+                parts.append(block.get("text", ""))
+            else:
+                parts.append(str(block))
+        return "".join(parts)
+    return str(content)
+
+
+def _extract_agent_outputs(messages) -> list[AgentOutputCapture]:
+    """Pair each `task` tool-call (→ subagent_type) with its ToolMessage (→ output)."""
+    id_to_agent: dict[str, str] = {}
+    for m in messages:
+        # tool_calls are dicts at runtime (TypedDict); the getattr path is defensive only.
+        for tc in getattr(m, "tool_calls", None) or []:
+            name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
+            if name != "task":
+                continue
+            args = tc.get("args", {}) if isinstance(tc, dict) else getattr(tc, "args", {})
+            call_id = tc.get("id") if isinstance(tc, dict) else getattr(tc, "id", None)
+            subagent = (args or {}).get("subagent_type")
+            if call_id and subagent:
+                id_to_agent[call_id] = subagent
+
+    outputs: list[AgentOutputCapture] = []
+    for m in messages:
+        call_id = getattr(m, "tool_call_id", None)
+        if call_id and call_id in id_to_agent:
+            outputs.append(
+                AgentOutputCapture(agent_id=id_to_agent[call_id], output=_message_text(m.content))
+            )
+    return outputs
+
+
+def _run_orchestrator(repo_path: Path, agents, orchestrator_prompt: str | None = None):
     model = get_llm()
     _ensure_profile_registered(model)
-    holder: dict = {}
-    agents = get_audit_agents()
+    submitted_report: dict = {}
+    system_prompt = orchestrator_prompt or ORCHESTRATOR_SYSTEM_PROMPT
     agent = create_deep_agent(
         model=model,
-        system_prompt=ORCHESTRATOR_SYSTEM_PROMPT,
+        system_prompt=system_prompt,
         backend=_make_backend(repo_path),
         subagents=_build_specialist_subagents(agents),
-        tools=[_make_submit_report_tool(holder)],
+        tools=[_make_submit_report_tool(submitted_report)],
     )
-    agent.invoke({"messages": [{"role": "user", "content": _build_orchestrator_prompt(agents)}]})
+    state = agent.invoke(
+        {"messages": [{"role": "user", "content": _build_orchestrator_prompt(agents)}]}
+    )
 
-    if "markdown" not in holder:
+    if "markdown" not in submitted_report:
         raise AgentOutputError(
             "orchestrator",
             "submit_report was never called",
             ValueError("No report submitted by orchestrator"),
         )
-    return holder
+    messages = state.get("messages", []) if isinstance(state, dict) else []
+    return submitted_report, _extract_agent_outputs(messages)
 
 
-def run_pipeline(job) -> PipelineReport:
-    """Run the orchestrated audit over the cloned repo and return a PipelineReport."""
+def run_pipeline(job, agents, orchestrator_prompt: str | None = None) -> PipelineResult:
+    """Run the orchestrated audit over the cloned repo and return a PipelineResult."""
     repo_name = getattr(job, "repo_full_name", None) or Path(str(job.clone_path)).name
-    holder = _run_orchestrator(job.clone_path)
-    return PipelineReport(
+    submitted_report, agent_outputs = _run_orchestrator(
+        job.clone_path, agents, orchestrator_prompt
+    )
+    report = PipelineReport(
         job_id=str(job.pk),
         completed_at=datetime.now(tz=timezone.utc).isoformat(),
         repo_name=repo_name,
-        risk_level=holder["risk_level"],
-        summary=holder["summary"],
-        markdown=holder["markdown"],
+        risk_level=submitted_report["risk_level"],
+        summary=submitted_report["summary"],
+        markdown=submitted_report["markdown"],
     )
+    return PipelineResult(report=report, agent_outputs=agent_outputs)
 
 
 def report_to_markdown(report: PipelineReport) -> str:

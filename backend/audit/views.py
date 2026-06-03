@@ -1,6 +1,8 @@
 import logging
 
 from django.shortcuts import get_object_or_404
+from rest_framework.authentication import SessionAuthentication
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -62,14 +64,29 @@ class StartAuditView(APIView):
                 status=400,
             )
 
+        # Only staff may keep sources; non-staff/anonymous always get False.
+        # Staff defaults to False; must explicitly opt in.
+        keep_sources = request.user.is_staff and serializer.validated_data.get(
+            "keep_sources", False
+        )
+
         audit_job = AuditJob.objects.create(
             installation=installation,
             repo_full_name=repo_full_name,
             email=email,
             state=AuditJob.State.PENDING,
+            keep_sources=keep_sources,
         )
 
         clone_repo.delay(audit_job.pk)
 
         output_serializer = AuditJobSerializer(audit_job)
         return Response(output_serializer.data, status=201)
+
+
+class MeView(APIView):
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response({"is_staff": request.user.is_staff})

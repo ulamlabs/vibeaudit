@@ -2,7 +2,7 @@ from django.conf import settings
 
 
 def _rate_limiter():
-    rps = getattr(settings, "AI_REQUESTS_PER_SECOND", 0)
+    rps = settings.AI_REQUESTS_PER_SECOND
     if not rps:
         return None
     from langchain_core.rate_limiters import InMemoryRateLimiter
@@ -22,7 +22,7 @@ def get_llm():
         return ChatOllama(
             model=model,
             base_url=settings.AI_OLLAMA_BASE_URL,
-            num_ctx=getattr(settings, "AI_OLLAMA_NUM_CTX", 8192),
+            num_ctx=settings.AI_OLLAMA_NUM_CTX,
         )
 
     if provider == "anthropic":
@@ -33,7 +33,7 @@ def get_llm():
             api_key=settings.AI_ANTHROPIC_API_KEY,
             rate_limiter=_rate_limiter(),
         )
-        max_tokens = getattr(settings, "AI_MAX_TOKENS", 0)
+        max_tokens = settings.AI_MAX_TOKENS
         if max_tokens:
             kwargs["max_tokens"] = max_tokens
         return ChatAnthropic(**kwargs)

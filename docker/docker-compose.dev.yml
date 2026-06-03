@@ -48,8 +48,10 @@ services:
       - "8000:8000"
     labels:
       - "traefik.enable=true"
-      # we forward via traefik only /api so that it can be tested with ngrok. for /admin access service directly.
-      - "traefik.http.routers.backend.rule=PathPrefix(`/api`)"
+      # /api for the SPA; /admin + /static so staff can log into Django admin on the
+      # same origin as the frontend (the session cookie is then shared with /api/me).
+      # NOTE: this also exposes /admin if you tunnel the dev entrypoint via ngrok.
+      - "traefik.http.routers.backend.rule=PathPrefix(`/api`) || PathPrefix(`/admin`) || PathPrefix(`/static`)"
       - "traefik.http.services.backend.loadbalancer.server.port=8000"
     depends_on:
       - db

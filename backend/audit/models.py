@@ -2,7 +2,7 @@ import shutil
 from pathlib import Path
 
 from django.conf import settings
-from django.db import models
+from django.db import models, transaction
 
 
 class AuditJob(models.Model):
@@ -12,21 +12,20 @@ class AuditJob(models.Model):
         PENDING = "pending", "Pending"
         CLONING = "cloning", "Cloning"
         AWAITING_APPROVAL = "awaiting_approval", "Awaiting Approval"
-        QUEUED = "queued", "Queued"
-        RUNNING = "running", "Running"
-        COMPLETED = "completed", "Completed"
+        READY = "ready", "Ready"
+        CLOSED = "closed", "Closed"
         FAILED = "failed", "Failed"
         REJECTED = "rejected", "Rejected"
-        CANCELED = "canceled", "Canceled"
 
-    ACTIVE_STATES = [State.PENDING, State.CLONING, State.RUNNING]
+    # States that hold a live clone / unfinished work — block installation deletion.
+    ACTIVE_STATES = [State.PENDING, State.CLONING, State.AWAITING_APPROVAL, State.READY]
 
     VALID_TRANSITIONS: dict[str, list[str]] = {
         State.PENDING: [State.CLONING],
         State.CLONING: [State.AWAITING_APPROVAL, State.FAILED],
-        State.AWAITING_APPROVAL: [State.QUEUED, State.REJECTED],
-        State.QUEUED: [State.RUNNING],
-        State.RUNNING: [State.COMPLETED, State.FAILED],
+        State.AWAITING_APPROVAL: [State.READY, State.REJECTED],
+        State.READY: [State.CLOSED],
+        State.REJECTED: [State.CLOSED],
     }
 
     installation = models.ForeignKey(
@@ -46,8 +45,11 @@ class AuditJob(models.Model):
         help_text="Current state of the audit job",
     )
     created_at = models.DateTimeField(auto_now_add=True)
-    report = models.TextField(
-        blank=True, help_text="Audit report content (empty until job completes)"
+    keep_sources = models.BooleanField(
+        default=False,
+        help_text="Keep the cloned sources after a run so the job can be re-run. "
+        "Defaults False (external jobs are cleaned up after one run); only staff "
+        "submitters may opt in to keeping sources.",
     )
 
     class Meta:
@@ -71,17 +73,188 @@ class AuditJob(models.Model):
     def delete_clone(self) -> None:
         shutil.rmtree(self.job_dir, ignore_errors=True)
 
-    def approve(self) -> None:
-        from audit.tasks import run_audit  
+    def default_suite(self):
+        from audit.models import AuditSuite
 
-        self.transition_to(self.State.QUEUED)
-        run_audit.delay(self.pk)
+        suite = AuditSuite.objects.filter(is_default=True).first()
+        if suite is None:
+            raise ValueError("No default AuditSuite configured.")
+        return suite
+
+    @property
+    def is_runnable(self) -> bool:
+        # Only a READY job still has its clone on disk.
+        return self.state == self.State.READY
+
+    @property
+    def is_running(self) -> bool:
+        # True if any run for this job is currently executing.
+        return self.runs.filter(status=AuditRun.Status.RUNNING).exists()
+
+    def start_run(self, suite, *, generate_pdf: bool = False):
+        """Create and enqueue a run for a READY job."""
+        from audit.models import AuditRun
+
+        if not self.is_runnable:
+            raise ValueError(f"Cannot start a run while job is {self.state!r}")
+        run = AuditRun.objects.create(job=self, suite=suite, generate_pdf=generate_pdf)
+        run.enqueue()
+        return run
+
+    def approve(self) -> None:
+        # Resolve suite before transitioning so missing default doesn't strand job
+        suite = self.default_suite()
+        self.transition_to(self.State.READY)
+        self.start_run(suite)
 
     def reject(self) -> None:
-        from audit.tasks import cleanup_job_dir  
-
         self.transition_to(self.State.REJECTED)
-        cleanup_job_dir.delay(self.pk)
+        self.cleanup()
+
+    def cleanup(self) -> None:
+        self.delete_clone()
+        if self.state in (self.State.READY, self.State.REJECTED):
+            self.transition_to(self.State.CLOSED)
 
     def __str__(self):
         return f"AuditJob #{self.pk} ({self.repo_full_name} - {self.state})"
+
+
+class AuditSuite(models.Model):
+    """A named, editable collection of specialist agents."""
+
+    name = models.CharField(max_length=120, unique=True)
+    description = models.TextField(blank=True)
+    is_default = models.BooleanField(
+        default=False, help_text="Suite used for the automatic run created on approval."
+    )
+    orchestrator_prompt = models.TextField(
+        blank=True,
+        help_text="Optional override of the orchestrator system prompt; blank uses the code default.",
+    )
+    task_soft_time_limit_seconds = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Optional Celery soft time limit override in seconds for runs started with this suite.",
+    )
+    task_time_limit_seconds = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Optional Celery hard time limit override in seconds for runs started with this suite.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def save(self, *args, **kwargs):
+        update_fields = kwargs.get("update_fields")
+        touches_default = update_fields is None or "is_default" in update_fields
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            if self.is_default and touches_default:
+                AuditSuite.objects.exclude(pk=self.pk).filter(is_default=True).update(
+                    is_default=False
+                )
+
+    def resolve_task_time_limits(self) -> tuple[int, int]:
+        soft_default = max(1, settings.AUDIT_TASK_SOFT_TIME_LIMIT_SECONDS)
+        hard_default = max(
+            soft_default + 1,
+            settings.AUDIT_TASK_TIME_LIMIT_SECONDS,
+        )
+
+        soft_limit = self.task_soft_time_limit_seconds or soft_default
+        hard_limit = self.task_time_limit_seconds or hard_default
+
+        if hard_limit <= soft_limit:
+            hard_limit = soft_limit + 1
+
+        return soft_limit, hard_limit
+
+    def __str__(self):
+        return self.name
+
+
+class AuditAgent(models.Model):
+    """A specialist agent owned by a suite (mirrors ai.agents.AgentDefinition)."""
+
+    suite = models.ForeignKey(
+        AuditSuite, related_name="agents", on_delete=models.CASCADE
+    )
+    agent_id = models.SlugField(
+        max_length=80, help_text="Subagent identifier passed to the orchestrator."
+    )
+    name = models.CharField(max_length=120)
+    description = models.TextField(help_text="Delegation blurb the orchestrator sees.")
+    prompt = models.TextField(help_text="Specialist focus instructions.")
+    position = models.PositiveIntegerField(default=0)
+    enabled = models.BooleanField(default=True)
+
+    class Meta:
+        unique_together = [("suite", "agent_id")]
+        ordering = ["position", "id"]
+
+    def __str__(self):
+        return f"suite {self.suite_id} / {self.agent_id}"
+
+
+class AuditRun(models.Model):
+    """One execution of one suite against a job's clone."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        RUNNING = "running", "Running"
+        COMPLETED = "completed", "Completed"
+        FAILED = "failed", "Failed"
+
+    job = models.ForeignKey(AuditJob, related_name="runs", on_delete=models.CASCADE)
+    suite = models.ForeignKey(AuditSuite, on_delete=models.PROTECT)
+    status = models.CharField(
+        max_length=16, choices=Status.choices, default=Status.PENDING
+    )
+    generate_pdf = models.BooleanField(default=False)
+    summary = models.TextField(blank=True)
+    markdown = models.TextField(blank=True, help_text="Report body (no top-level title).")
+    error = models.TextField(blank=True)
+    celery_task_id = models.CharField(max_length=36, blank=True, help_text="Celery task ID for tracking/revoking.")
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def enqueue(self):
+        """Queue this run and persist the created Celery task ID."""
+        from audit.tasks import execute_audit_run
+
+        soft_time_limit, time_limit = self.suite.resolve_task_time_limits()
+        task = execute_audit_run.apply_async(
+            args=[self.pk],
+            soft_time_limit=soft_time_limit,
+            time_limit=time_limit,
+        )
+        self.celery_task_id = task.id or ""
+        self.save(update_fields=["celery_task_id"])
+        return task
+
+    def __str__(self):
+        return f"Run #{self.pk} (job #{self.job_id}, {self.suite_id}, {self.status})"
+
+
+class AgentRunOutput(models.Model):
+    """Raw markdown a specialist subagent returned during a run (for debugging)."""
+
+    run = models.ForeignKey(
+        AuditRun, related_name="agent_outputs", on_delete=models.CASCADE
+    )
+    agent_id = models.CharField(max_length=80)
+    output = models.TextField()
+    position = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["position", "id"]
+
+    def __str__(self):
+        return f"{self.agent_id} (run #{self.run_id})"

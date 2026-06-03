@@ -22,6 +22,7 @@ from django.template import TemplateDoesNotExist
 from django.urls import include, path, re_path
 from django.views.generic import TemplateView
 
+from audit.views import MeView
 from vibeaudit.views import healthcheck
 
 
@@ -45,6 +46,7 @@ class SafeTemplateView(TemplateView):
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/healthz", healthcheck, name="healthz"),
+    path("api/me", MeView.as_view(), name="me"),
     path("api/github/", include("github_app.urls")),
     path("api/audit/", include("audit.urls")),
 ]

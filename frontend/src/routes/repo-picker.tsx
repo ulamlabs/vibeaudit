@@ -19,6 +19,10 @@ interface AuditJob {
   created_at: string
 }
 
+interface Me {
+  is_staff: boolean
+}
+
 function RepoPicker() {
   const navigate = useNavigate()
 
@@ -29,6 +33,8 @@ function RepoPicker() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [job, setJob] = useState<AuditJob | null>(null)
+  const [isStaff, setIsStaff] = useState(false)
+  const [keepSources, setKeepSources] = useState(true)
 
   useEffect(() => {
     api
@@ -50,6 +56,15 @@ function RepoPicker() {
       .finally(() => setLoading(false))
   }, [navigate])
 
+  useEffect(() => {
+    // Hide staff controls unless /api/me confirms a staff session.
+    api
+      .get('api/me')
+      .json<Me>()
+      .then((me) => setIsStaff(me.is_staff))
+      .catch(() => setIsStaff(false))
+  }, [])
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!selectedRepo || !email) return
@@ -58,8 +73,11 @@ function RepoPicker() {
     setError(null)
 
     try {
+      const payload: Record<string, unknown> = { repo_full_name: selectedRepo, email }
+      // Only staff may control source retention; the backend ignores it otherwise.
+      if (isStaff) payload.keep_sources = keepSources
       const data = await api
-        .post('api/audit/start', { json: { repo_full_name: selectedRepo, email } })
+        .post('api/audit/start', { json: payload })
         .json<AuditJob>()
       setJob(data)
     } catch (err: any) {
@@ -144,6 +162,19 @@ function RepoPicker() {
             required
           />
         </div>
+
+        {isStaff && (
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={keepSources}
+              onChange={(e) => setKeepSources(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300"
+            />
+            Keep cloned sources after the run (staff only — enables re-running with
+            different suites)
+          </label>
+        )}
 
         <button
           type="submit"

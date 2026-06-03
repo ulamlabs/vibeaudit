@@ -232,8 +232,14 @@ AI_REQUESTS_PER_SECOND = env.float("AI_REQUESTS_PER_SECOND", default=0)
 # 0 = use provider default (no explicit cap).
 AI_MAX_TOKENS = env.int("AI_MAX_TOKENS", default=0)
 
-# Audit sandbox backend: "local" uses FilesystemBackend (read-only VFS), "modal" for cloud sandboxing
-AUDIT_SANDBOX_BACKEND = env("AUDIT_SANDBOX_BACKEND", default="local")
+# Defaults for Celery audit execution time limits.
+# Soft limit raises SoftTimeLimitExceeded; hard limit forcefully terminates.
+AUDIT_TASK_SOFT_TIME_LIMIT_SECONDS = env.int(
+    "AUDIT_TASK_SOFT_TIME_LIMIT_SECONDS", default=600
+)
+AUDIT_TASK_TIME_LIMIT_SECONDS = env.int(
+    "AUDIT_TASK_TIME_LIMIT_SECONDS", default=660
+)
 
 
 # Default primary key field type

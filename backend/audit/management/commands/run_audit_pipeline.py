@@ -46,6 +46,13 @@ class Command(BaseCommand):
             action="store_true",
             help="Skip PDF generation (useful when typst fonts are unavailable).",
         )
+        parser.add_argument(
+            "--suite",
+            type=str,
+            default=None,
+            help="Name of the AuditSuite to run. Defaults to the is_default suite, "
+            "or the in-code default agents if no suite exists.",
+        )
 
     def handle(self, *args, **options):
         repo_path: Path = options["repo_path"].resolve()
@@ -57,7 +64,28 @@ class Command(BaseCommand):
 
         output_dir.mkdir(parents=True, exist_ok=True)
 
+        from audit.ai.agents import get_audit_agents
         from audit.ai.pipeline import report_to_markdown, run_pipeline
+        from audit.ai.suites import suite_to_agent_definitions
+        from audit.models import AuditSuite
+
+        suite_name = options["suite"]
+        suite = None
+        if suite_name:
+            suite = AuditSuite.objects.filter(name=suite_name).first()
+            if suite is None:
+                raise CommandError(f"No AuditSuite named {suite_name!r}.")
+        else:
+            suite = AuditSuite.objects.filter(is_default=True).first()
+
+        if suite is not None:
+            agents = suite_to_agent_definitions(suite)
+            orchestrator_prompt = suite.orchestrator_prompt or None
+            self.stdout.write(f"Suite:      {suite.name}")
+        else:
+            agents = get_audit_agents()
+            orchestrator_prompt = None
+            self.stdout.write("Suite:      <in-code default agents>")
 
         self.stdout.write(f"Repo:       {repo_path}")
         self.stdout.write(f"Output dir: {output_dir}")
@@ -65,7 +93,8 @@ class Command(BaseCommand):
 
         job = _FakeJob(repo_path, output_dir)
         self.stdout.write("Running orchestrated subagent pipeline...")
-        report = run_pipeline(job)
+        result = run_pipeline(job, agents, orchestrator_prompt)
+        report = result.report
 
         json_path = output_dir / "report.json"
         json_path.write_text(report.model_dump_json(indent=2))
