@@ -1,7 +1,7 @@
 import git
 from celery import shared_task
 
-from audit.ai.pipeline import run_pipeline
+from audit.ai.runner import run_pipeline
 from audit.models import AuditJob
 from github_app.github import get_installation_token
 
@@ -55,12 +55,6 @@ def execute_audit_run(self, run_id: int) -> None:
         agents = suite_to_agent_definitions(run.suite)
         result = run_pipeline(job, agents, run.suite.orchestrator_prompt or None)
         report = result.report
-
-        # Build the PDF before marking COMPLETED so a PDF failure marks the run FAILED.
-        if run.generate_pdf:
-            from audit.ai.report.typst_builder import build_pdf
-
-            build_pdf(report, job.job_dir / f"run_{run.pk}.pdf")
 
         run.summary = report.summary
         run.markdown = report.markdown

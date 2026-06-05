@@ -8,13 +8,14 @@ from rest_framework.views import APIView
 
 from audit.authentication import AuditAuthentication
 
-logger = logging.getLogger(__name__)
 from audit.models import AuditJob
 from audit.serializers import AuditJobSerializer, StartAuditSerializer
 from audit.tasks import clone_repo
 from github_app.github import InstallationNotFoundError, repo_is_accessible
 from github_app.models import Installation
 
+
+logger = logging.getLogger(__name__)
 
 class StartAuditView(APIView):
     """

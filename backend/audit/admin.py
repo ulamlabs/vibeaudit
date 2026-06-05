@@ -32,7 +32,7 @@ def _collapsed_raw(text: str):
 class AuditRunForm(forms.ModelForm):
     class Meta:
         model = AuditRun
-        fields = ["job", "suite", "generate_pdf"]
+        fields = ["job", "suite"]
 
     def clean(self):
         cleaned = super().clean()
@@ -138,11 +138,10 @@ class AuditRunAdmin(ModelAdmin):
 
     def get_fields(self, request, obj=None):
         if obj is None:
-            return ["job", "suite", "generate_pdf"]
+            return ["job", "suite"]
         return [
             "job",
             "suite",
-            "generate_pdf",
             "status",
             "summary",
             "report_html",
@@ -263,17 +262,17 @@ class AuditJobAdmin(ModelAdmin):
         running_runs = job.runs.filter(status=AuditRun.Status.RUNNING)
         if running_runs.exists():
             from celery import current_app
-            
+
             for run in running_runs:
                 if run.celery_task_id:
                     current_app.control.revoke(run.celery_task_id, terminate=True)
                     run.status = AuditRun.Status.FAILED
                     run.error = "Job cleanup triggered while running"
                     run.save(update_fields=["status", "error"])
-            
+
             self.message_user(
                 request,
-                f"Terminated {running_runs.count()} running audit(s) for job #{job.pk}.",
+                f"Terminated all running audits for job #{job.pk}.",
                 messages.WARNING,
             )
         

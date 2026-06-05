@@ -91,13 +91,13 @@ class AuditJob(models.Model):
         # True if any run for this job is currently executing.
         return self.runs.filter(status=AuditRun.Status.RUNNING).exists()
 
-    def start_run(self, suite, *, generate_pdf: bool = False):
+    def start_run(self, suite):
         """Create and enqueue a run for a READY job."""
         from audit.models import AuditRun
 
         if not self.is_runnable:
             raise ValueError(f"Cannot start a run while job is {self.state!r}")
-        run = AuditRun.objects.create(job=self, suite=suite, generate_pdf=generate_pdf)
+        run = AuditRun.objects.create(job=self, suite=suite)
         run.enqueue()
         return run
 
@@ -213,7 +213,6 @@ class AuditRun(models.Model):
     status = models.CharField(
         max_length=16, choices=Status.choices, default=Status.PENDING
     )
-    generate_pdf = models.BooleanField(default=False)
     summary = models.TextField(blank=True)
     markdown = models.TextField(blank=True, help_text="Report body (no top-level title).")
     error = models.TextField(blank=True)

@@ -3,7 +3,7 @@ from unittest.mock import patch
 import pytest
 
 from audit.ai.output import PipelineReport
-from audit.ai.pipeline import AgentOutputCapture, PipelineResult
+from audit.ai.runner import AgentOutputCapture, PipelineResult
 from audit.models import AgentRunOutput, AuditAgent, AuditJob, AuditRun, AuditSuite
 from audit.tasks import execute_audit_run
 from github_app.models import Installation

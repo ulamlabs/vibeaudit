@@ -3,17 +3,12 @@ from unittest.mock import patch
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from audit.ai.agents import AgentDefinition, get_audit_agents
-from audit.ai.output import PipelineReport
-from audit.ai.pipeline import (
+from audit.ai.runner import (
     AgentOutputCapture,
     PipelineResult,
     _extract_agent_outputs,
-    _make_submit_report_tool,
-    report_to_markdown,
     run_pipeline,
 )
-from audit.ai.report.typst_builder import _render_source, _sanitize_typst
-
 
 
 def test_get_audit_agents_is_unique_and_nonempty() -> None:
@@ -22,7 +17,9 @@ def test_get_audit_agents_is_unique_and_nonempty() -> None:
     ids = [a.id for a in agents]
     assert len(ids) == len(set(ids))
     assert all(isinstance(a, AgentDefinition) for a in agents)
-    assert all(a.prompt.strip() and a.name.strip() and a.description.strip() for a in agents)
+    assert all(
+        a.prompt.strip() and a.name.strip() and a.description.strip() for a in agents
+    )
 
 
 class _FakeJob:
@@ -39,8 +36,12 @@ class _FakeJob:
 
 
 def test_run_pipeline_builds_report_from_orchestrator_holder() -> None:
-    holder = {"risk_level": "medium", "summary": "Some risk.", "markdown": "## Findings\nstuff"}
-    with patch("audit.ai.pipeline._run_orchestrator", return_value=(holder, [])):
+    holder = {
+        "risk_level": "medium",
+        "summary": "Some risk.",
+        "markdown": "## Findings\nstuff",
+    }
+    with patch("audit.ai.runner._run_orchestrator", return_value=(holder, [])):
         result = run_pipeline(_FakeJob(), agents=[])
     report = result.report
     assert report.job_id == "job-xyz"
@@ -68,16 +69,16 @@ def test_extract_agent_outputs_pairs_task_calls_to_tool_messages() -> None:
         AIMessage(content="done"),
     ]
     outputs = _extract_agent_outputs(messages)
-    assert outputs == [AgentOutputCapture(agent_id="project_overview", output="## Repo\nstuff")]
+    assert outputs == [
+        AgentOutputCapture(agent_id="project_overview", output="## Repo\nstuff")
+    ]
 
 
 def test_extract_agent_outputs_handles_block_content() -> None:
     messages = [
         AIMessage(
             content="",
-            tool_calls=[
-                {"name": "task", "args": {"subagent_type": "a"}, "id": "c1"}
-            ],
+            tool_calls=[{"name": "task", "args": {"subagent_type": "a"}, "id": "c1"}],
         ),
         ToolMessage(content=[{"type": "text", "text": "block out"}], tool_call_id="c1"),
     ]
@@ -119,22 +120,9 @@ def test_extract_agent_outputs_ignores_orphaned_task_call() -> None:
 def test_run_pipeline_returns_result_with_report_and_outputs() -> None:
     holder = {"risk_level": "low", "summary": "ok", "markdown": "## B\nx"}
     captures = [AgentOutputCapture(agent_id="project_overview", output="## Repo\ns")]
-    with patch(
-        "audit.ai.pipeline._run_orchestrator", return_value=(holder, captures)
-    ):
+    with patch("audit.ai.runner._run_orchestrator", return_value=(holder, captures)):
         result = run_pipeline(_FakeJob(), agents=[])
     assert isinstance(result, PipelineResult)
     assert result.report.risk_level == "low"
     assert result.report.repo_name == "acme/widgets"
     assert result.agent_outputs == captures
-
-
-def test_sanitize_typst_escapes_dangerous_directives() -> None:
-    src = '#import "secrets"\nnormal text\n#include "other"\n#eval("code")\n#sys.inputs\n'
-    sanitized = _sanitize_typst(src)
-    # dangerous directives replaced with escaped (non-executing) forms
-    assert '\\#import "secrets"' in sanitized
-    assert '\\#include "other"' in sanitized
-    assert '\\#eval("code")' in sanitized
-    assert '\\#sys.inputs' in sanitized
-    assert "normal text" in sanitized  # safe content untouched

@@ -143,7 +143,7 @@ def test_approve_without_default_suite_does_not_strand(installation):
 def test_audit_run_form_rejects_run_for_non_ready_job(installation, default_suite):
     job = _job(installation, AuditJob.State.CLOSED)  # sources deleted
     form = AuditRunForm(
-        data={"job": job.pk, "suite": default_suite.pk, "generate_pdf": False}
+        data={"job": job.pk, "suite": default_suite.pk}
     )
     assert not form.is_valid()
     assert "READY" in str(form.errors)
@@ -153,7 +153,7 @@ def test_audit_run_form_rejects_run_for_non_ready_job(installation, default_suit
 def test_audit_run_form_accepts_run_for_ready_job(installation, default_suite):
     job = _job(installation, AuditJob.State.READY)
     form = AuditRunForm(
-        data={"job": job.pk, "suite": default_suite.pk, "generate_pdf": False}
+        data={"job": job.pk, "suite": default_suite.pk}
     )
     assert form.is_valid(), form.errors
 
