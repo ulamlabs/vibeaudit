@@ -19,9 +19,9 @@ elif [ "$1" = "web" ]; then
         --workers=4 \
         --worker-class=gthread \
         --threads=2
-# elif [ "$1" = "worker" ]; then
-#     echo "Starting Celery worker..."
-#     exec celery -A vibeaudit worker --loglevel=info
+elif [ "$1" = "worker" ]; then
+    echo "Starting Celery worker..."
+    exec celery -A vibeaudit worker --loglevel=info
 # elif [ "$1" = "beat" ]; then
 #     echo "Starting Celery beat..."
 #     exec celery -A vibeaudit beat --loglevel=info

@@ -1,1 +1,4 @@
 tmp/
+backend/repos/
+backend/.env
+backend/secrets/*.pem

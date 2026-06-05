@@ -125,9 +125,7 @@ class InstallationsView(APIView):
             # Network errors etc. — don't penalise the user; treat as still active.
             pass
 
-        has_active_jobs = installation.audit_jobs.filter(
-            state__in=["pending", "cloning", "running"]
-        ).exists()
+        has_active_jobs = installation.has_active_audit_jobs()
 
         serializer = InstallationSerializer(
             installation, context={"has_active_jobs": has_active_jobs}
@@ -156,10 +154,7 @@ class InstallationDeleteView(APIView):
             return Response({"error": "Installation not found"}, status=404)
 
         # Block if active jobs are in progress.
-        active_jobs = installation.audit_jobs.filter(
-            state__in=["pending", "cloning", "running"]
-        ).exists()
-        if active_jobs:
+        if installation.has_active_audit_jobs():
             return Response(
                 {"error": "Cannot delete installation while audit jobs are in progress"},
                 status=400,

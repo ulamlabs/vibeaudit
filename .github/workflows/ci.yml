@@ -85,6 +85,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
+          file: docker/Dockerfile
           platforms: linux/amd64
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
           tags: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:latest

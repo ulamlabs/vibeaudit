@@ -54,13 +54,15 @@ class Installation(models.Model):
         self.remote_deleted_at = None
         self.save(update_fields=["account_login", "account_type", "remote_deleted_at"])
 
+    def has_active_audit_jobs(self) -> bool:
+        from audit.models import AuditJob  # local import to avoid circular dependency
+
+        return self.audit_jobs.filter(state__in=AuditJob.ACTIVE_STATES).exists()
+
     def uninstall(self) -> None:
-        """
-        Delete the installation from GitHub and mark it as remote-deleted locally.
-        Safe to call if the installation is already gone from GitHub.
-        """
+        """Delete the installation from GitHub and mark it as remote-deleted locally."""
         try:
             delete_installation(self.installation_id)
         except InstallationNotFoundError:
-            pass  # Already gone — still record it locally.
+            pass
         self.mark_remote_deleted()

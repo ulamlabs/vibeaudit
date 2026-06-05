@@ -6,20 +6,23 @@ image_repo := env_var_or_default("IMAGE_REPO", "ghcr.io/ulamlabs/vibeaudit")
 image_tag := env_var_or_default("IMAGE_TAG", "latest")
 image_ref := image_repo + ":" + image_tag
 
+alias i   := install
+alias dbe := dev-be     # Dev Back End 
+alias dfe := dev-fe     # Dev Front End
+alias dcu := dc-up      # Docker Compose Up
+alias dcd := dc-down    # Docker Compose Down
+
 # Default recipe
 default:
     @just --list
 
 # Build local Docker image
 build:
-    docker build -t {{ image_ref }} .
+    docker build -f docker/Dockerfile -t {{ image_ref }} .
 
 # Run backend dev server
 dev-be:
     cd backend && uv run python manage.py runserver 0.0.0.0:8000
-
-# Alias for backend dev server
-dbe: dev-be
 
 # Install backend dependencies
 ibe:
@@ -32,19 +35,33 @@ ife:
 # Install all dependencies
 install: ibe ife
 
-# Alias for install
-i: install
-
 # Run frontend dev server
 dev-fe:
     cd frontend && npm run dev
 
-# Alias for frontend dev server
-dfe: dev-fe
-
 # Run local Docker image
 run:
     docker run --rm -p 8080:8080 {{ image_ref }}
+
+# Start dev environment via Docker Compose (build if needed)
+dc-up:
+    docker compose -f docker/docker-compose.dev.yml up --build
+
+# Stop dev environment
+dc-down:
+    docker compose -f docker/docker-compose.dev.yml down
+
+# Build dev Docker images without starting
+dc-build:
+    docker compose -f docker/docker-compose.dev.yml build
+
+# Run Django migrations inside the running backend container
+dc-migrate:
+    docker compose -f docker/docker-compose.dev.yml exec backend python manage.py migrate --noinput
+
+# Open a bash shell inside the running backend container
+dc-shell:
+    docker compose -f docker/docker-compose.dev.yml exec backend sh
 
 # Run Django migrations
 migrate:

@@ -22,6 +22,8 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+RUN apk add --no-cache git
+
 # Install only third-party backend dependencies with lockfile in the cacheable layer.
 COPY backend/pyproject.toml backend/uv.lock ./
 RUN uv sync --locked --no-dev --no-install-project
@@ -36,7 +38,7 @@ COPY --from=frontend-build /frontend/dist/index.html ./vibeaudit/templates/index
 COPY --from=frontend-build /frontend/dist/static/. ./vibeaudit/static/
 
 # Runtime entrypoint.
-COPY deploy/entrypoint.sh /entrypoint.sh
+COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Collect static files for WhiteNoise.
