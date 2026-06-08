@@ -57,7 +57,7 @@ def test_valid_transition_pending_to_cloning(installation):
 def test_invalid_transition_raises(installation):
     job = _job(installation, AuditJob.State.PENDING)
     with pytest.raises(ValueError):
-        job.transition_to(AuditJob.State.CLOSED)
+        job.transition_to(AuditJob.State.READY)
 
 
 @pytest.mark.django_db
@@ -118,12 +118,12 @@ def test_cleanup_deletes_clone_and_closes(installation):
 
 
 @pytest.mark.django_db
-def test_reject_moves_through_rejected_to_closed(installation):
+def test_reject_moves_to_rejected(installation):
     job = _job(installation, AuditJob.State.AWAITING_APPROVAL)
     with patch.object(AuditJob, "delete_clone") as del_clone:
         job.reject()
     job.refresh_from_db()
-    assert job.state == AuditJob.State.CLOSED
+    assert job.state == AuditJob.State.REJECTED
     del_clone.assert_called_once()
 
 
