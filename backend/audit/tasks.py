@@ -56,11 +56,9 @@ def execute_audit_run(self, run_id: int) -> None:
         return
 
     # Store the Celery task ID for tracking/revocation (None if called directly in tests)
-    celery_task_id = getattr(self.request, 'id', None) if hasattr(self, 'request') else None
-    run.celery_task_id = celery_task_id or ''
     run.status = AuditRun.Status.RUNNING
     run.started_at = timezone.now()
-    run.save(update_fields=["celery_task_id", "status", "started_at"])
+    run.save(update_fields=["status", "started_at"])
 
     try:
         agents = suite_to_agent_definitions(suite)

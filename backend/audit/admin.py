@@ -205,9 +205,7 @@ class AuditRunAdmin(ModelAdmin):
             )
         else:
             current_app.control.revoke(run.celery_task_id, terminate=True)
-            run.status = AuditRun.Status.FAILED
-            run.error = "Terminated by admin user"
-            run.save(update_fields=["status", "error"])
+            run.terminate("Terminated by admin user")
             self.message_user(request, f"Run #{run.pk} terminated.")
         return redirect(reverse("admin:audit_auditrun_change", args=[object_id]))
 
@@ -280,9 +278,7 @@ class AuditJobAdmin(ModelAdmin):
             for run in running_runs:
                 if run.celery_task_id:
                     current_app.control.revoke(run.celery_task_id, terminate=True)
-                    run.status = AuditRun.Status.FAILED
-                    run.error = "Job cleanup triggered while running"
-                    run.save(update_fields=["status", "error"])
+                    run.terminate("Job cleanup triggered while running")
 
             self.message_user(
                 request,
@@ -298,6 +294,11 @@ class AuditJobAdmin(ModelAdmin):
     def bulk_cleanup(self, request, queryset):
         count = 0
         for job in queryset:
+            running_runs = job.runs.filter(status=AuditRun.Status.RUNNING)
+            for run in running_runs:
+                if run.celery_task_id:
+                    current_app.control.revoke(run.celery_task_id, terminate=True)
+                    run.terminate("Job cleanup triggered while running")
             job.cleanup()
             count += 1
         self.message_user(request, f"Sources deleted for {count} job(s).")

@@ -4,7 +4,7 @@
 	- Run management commands: `uv run python manage.py ...`
 	- Run scripts: `uv run python script.py`
 	Use `uvx` for command execution, and use `uv` script mode (with embedded dependencies) for one-off scripts.
-* If you want to browse library capabilities, first in for backend/.venv 
+* If you want to browse library capabilities, first check backend/.venv 
 * For backend tests, write `pytest`-style tests instead of built-in unittest-style tests.
 * Configure `settings.py` according to 12-factor principles, using environment variables.
 	The project should still run locally with no env vars set.

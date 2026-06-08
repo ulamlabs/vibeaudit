@@ -3,6 +3,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.db import models, transaction
+from django.utils import timezone
 
 
 class AuditJob(models.Model):
@@ -21,11 +22,12 @@ class AuditJob(models.Model):
     ACTIVE_STATES = [State.PENDING, State.CLONING, State.AWAITING_APPROVAL, State.READY]
 
     VALID_TRANSITIONS: dict[str, list[str]] = {
-        State.PENDING: [State.CLONING],
+        State.PENDING: [State.CLONING, State.CLOSED],
         State.CLONING: [State.AWAITING_APPROVAL, State.FAILED],
-        State.AWAITING_APPROVAL: [State.READY, State.REJECTED],
+        State.AWAITING_APPROVAL: [State.READY, State.REJECTED, State.CLOSED],
         State.READY: [State.CLOSED],
         State.REJECTED: [State.CLOSED],
+        State.FAILED: [State.CLOSED],
     }
 
     installation = models.ForeignKey(
@@ -105,12 +107,11 @@ class AuditJob(models.Model):
 
     def reject(self) -> None:
         self.transition_to(self.State.REJECTED)
-        self.cleanup()
+        self.delete_clone()
 
     def cleanup(self) -> None:
+        self.transition_to(self.State.CLOSED)
         self.delete_clone()
-        if self.state in (self.State.READY, self.State.REJECTED):
-            self.transition_to(self.State.CLOSED)
 
     def __str__(self):
         return f"AuditJob #{self.pk} ({self.repo_full_name} - {self.state})"
@@ -223,6 +224,13 @@ class AuditRun(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+
+    def terminate(self, reason: str) -> None:
+        """Mark this run as failed with a reason and record finished_at."""
+        self.status = AuditRun.Status.FAILED
+        self.error = reason
+        self.finished_at = timezone.now()
+        self.save(update_fields=["status", "error", "finished_at"])
 
     def enqueue(self):
         """Queue this run and persist the created Celery task ID."""
