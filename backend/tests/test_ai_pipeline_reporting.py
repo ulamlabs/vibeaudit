@@ -3,6 +3,7 @@ from unittest.mock import patch
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from audit.ai.agents import AgentDefinition, get_audit_agents
+from audit.ai.output import SubmittedReport
 from audit.ai.runner import (
     AgentOutputCapture,
     PipelineResult,
@@ -36,17 +37,12 @@ class _FakeJob:
 
 
 def test_run_pipeline_builds_report_from_orchestrator_holder() -> None:
-    holder = {
-        "risk_level": "medium",
-        "summary": "Some risk.",
-        "markdown": "## Findings\nstuff",
-    }
-    with patch("audit.ai.runner._run_orchestrator", return_value=(holder, [])):
-        result = run_pipeline(_FakeJob(), agents=[])
+    submitted = SubmittedReport(summary="Some risk.", markdown="## Findings\nstuff")
+    with patch("audit.ai.runner._run_orchestrator", return_value=(submitted, [])):
+        result = run_pipeline(_FakeJob(), agents=[], model_name="claude-sonnet-4-6")
     report = result.report
     assert report.job_id == "job-xyz"
     assert report.repo_name == "acme/widgets"
-    assert report.risk_level == "medium"
     assert report.summary == "Some risk."
     assert report.markdown == "## Findings\nstuff"
     assert report.completed_at
@@ -118,11 +114,11 @@ def test_extract_agent_outputs_ignores_orphaned_task_call() -> None:
 
 
 def test_run_pipeline_returns_result_with_report_and_outputs() -> None:
-    holder = {"risk_level": "low", "summary": "ok", "markdown": "## B\nx"}
+    submitted = SubmittedReport(summary="ok", markdown="## B\nx")
     captures = [AgentOutputCapture(agent_id="project_overview", output="## Repo\ns")]
-    with patch("audit.ai.runner._run_orchestrator", return_value=(holder, captures)):
-        result = run_pipeline(_FakeJob(), agents=[])
+    with patch("audit.ai.runner._run_orchestrator", return_value=(submitted, captures)):
+        result = run_pipeline(_FakeJob(), agents=[], model_name="claude-sonnet-4-6")
     assert isinstance(result, PipelineResult)
-    assert result.report.risk_level == "low"
+    assert result.report.summary == "ok"
     assert result.report.repo_name == "acme/widgets"
     assert result.agent_outputs == captures

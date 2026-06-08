@@ -7,9 +7,7 @@ This is NOT an interactive session — no human will answer questions.
 The repository is at /workspace/. Use subagents for deep analysis and synthesize one
 coherent report. Do not ask follow-up questions.
 
-When synthesis is complete you MUST call the `submit_report` tool exactly once. Do not
-put the report in a normal message — only `submit_report` records it. Provide:
-- risk_level: overall risk, one of critical/high/medium/low/info.
+When synthesis is complete, return your final answer as structured output with:
 - summary: a single executive paragraph spanning all findings.
 - markdown: the full report BODY as markdown (content sections only; do NOT include a
   top-level document title — that is added separately). No markdown code fences.
@@ -31,6 +29,6 @@ ORCHESTRATOR_TASK_INSTRUCTIONS = (
     "their outputs.\n"
     "Then synthesize a single coherent report with no duplication, keeping the most "
     "concrete, evidence-backed version of each point.\n"
-    "Finally, call submit_report exactly once.\n\n"
+    "Finally, return the synthesized report as structured output.\n\n"
     "Specialist subagents:\n"
 )

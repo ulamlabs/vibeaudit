@@ -10,26 +10,15 @@ def _rate_limiter():
     return InMemoryRateLimiter(requests_per_second=rps, check_every_n_seconds=0.1)
 
 
-def get_llm():
-    """Return a model for DeepAgents — a ChatModel instance for Ollama/Anthropic,
-    or a provider:model string for others."""
+def get_llm(model_name: str):
+    """Return a model for DeepAgents — a ChatAnthropic instance or a provider:model string."""
     provider = settings.AI_MODEL_PROVIDER
-    model = settings.AI_MODEL_NAME
-
-    if provider == "ollama":
-        from langchain_ollama import ChatOllama
-
-        return ChatOllama(
-            model=model,
-            base_url=settings.AI_OLLAMA_BASE_URL,
-            num_ctx=settings.AI_OLLAMA_NUM_CTX,
-        )
 
     if provider == "anthropic":
         from langchain_anthropic import ChatAnthropic
 
         kwargs = dict(
-            model=model,
+            model=model_name,
             api_key=settings.AI_ANTHROPIC_API_KEY,
             rate_limiter=_rate_limiter(),
         )
@@ -38,4 +27,4 @@ def get_llm():
             kwargs["max_tokens"] = max_tokens
         return ChatAnthropic(**kwargs)
 
-    return f"{provider}:{model}"
+    return f"{provider}:{model_name}"

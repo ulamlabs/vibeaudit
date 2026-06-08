@@ -74,8 +74,6 @@ class AuditJob(models.Model):
         shutil.rmtree(self.job_dir, ignore_errors=True)
 
     def default_suite(self):
-        from audit.models import AuditSuite
-
         suite = AuditSuite.objects.filter(is_default=True).first()
         if suite is None:
             raise ValueError("No default AuditSuite configured.")
@@ -93,8 +91,6 @@ class AuditJob(models.Model):
 
     def start_run(self, suite):
         """Create and enqueue a run for a READY job."""
-        from audit.models import AuditRun
-
         if not self.is_runnable:
             raise ValueError(f"Cannot start a run while job is {self.state!r}")
         run = AuditRun.objects.create(job=self, suite=suite)
@@ -131,6 +127,10 @@ class AuditSuite(models.Model):
     orchestrator_prompt = models.TextField(
         blank=True,
         help_text="Optional override of the orchestrator system prompt; blank uses the code default.",
+    )
+    model = models.CharField(
+        max_length=100,
+        help_text="Model name (e.g. 'claude-opus-4-7'). Combined with AI_MODEL_PROVIDER at run time.",
     )
     task_soft_time_limit_seconds = models.PositiveIntegerField(
         null=True,

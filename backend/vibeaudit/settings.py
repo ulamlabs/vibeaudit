@@ -217,10 +217,15 @@ GITHUB_APP_SLUG = env("GITHUB_APP_SLUG", default="vibeaudit")
 ALLOW_UNAUTHENTICATED_AUDIT = env.bool("ALLOW_UNAUTHENTICATED_AUDIT", default=False)
 
 # AI / LLM settings
-AI_MODEL_PROVIDER = env("AI_MODEL_PROVIDER", default="ollama")  # "ollama" | "anthropic" | "openai" | …
-AI_MODEL_NAME = env("AI_MODEL_NAME", default="qwen2.5:7b")
-AI_OLLAMA_BASE_URL = env("AI_OLLAMA_BASE_URL", default="http://localhost:11434")
-AI_OLLAMA_NUM_CTX = env.int("AI_OLLAMA_NUM_CTX", default=8192)
+AI_MODEL_PROVIDER = env("AI_MODEL_PROVIDER", default="anthropic")  # "anthropic" | "openai" | …
+AVAILABLE_AI_MODELS: list[str] = env.list(
+    "AVAILABLE_AI_MODELS",
+    default=[
+        "claude-haiku-4-5",
+        "claude-sonnet-4-6",
+        "claude-opus-4-7",
+    ],
+)
 AI_ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY", default="")
 # Requests per second passed to InMemoryRateLimiter.
 # NOTE: this limits requests/s, NOT tokens/minute. It won't reliably prevent

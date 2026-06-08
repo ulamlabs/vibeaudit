@@ -1,5 +1,7 @@
 from django import forms
+from celery import current_app
 from django.contrib import admin, messages
+from django.conf import settings as django_settings
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.html import format_html
@@ -7,6 +9,7 @@ from django.utils.safestring import mark_safe
 from unfold.admin import ModelAdmin, TabularInline
 from unfold.decorators import action
 
+from audit.ai.prompts import ORCHESTRATOR_SYSTEM_PROMPT
 from audit.models import AgentRunOutput, AuditAgent, AuditJob, AuditRun, AuditSuite
 from audit.rendering import render_markdown_safe
 
@@ -58,9 +61,25 @@ class AuditAgentInline(TabularInline):
     hide_ordering_field = True
 
 
+class AuditSuiteAdminForm(forms.ModelForm):
+    class Meta:
+        model = AuditSuite
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        available = django_settings.AVAILABLE_AI_MODELS
+        if available:
+            self.fields["model"].widget = forms.Select(
+                choices=[(m, m) for m in available]
+            )
+        # If AVAILABLE_AI_MODELS is empty, the default text input remains.
+
+
 @admin.register(AuditSuite)
 class AuditSuiteAdmin(ModelAdmin):
-    list_display = ["name", "is_default", "agent_count", "created_at"]
+    form = AuditSuiteAdminForm
+    list_display = ["name", "model", "is_default", "agent_count", "created_at"]
     list_filter = ["is_default"]
     search_fields = ["name", "description"]
     inlines = [AuditAgentInline]
@@ -72,7 +91,6 @@ class AuditSuiteAdmin(ModelAdmin):
 
     @admin.display(description="Effective Orchestrator Prompt")
     def effective_orchestrator_prompt(self, obj):
-        from audit.ai.prompts import ORCHESTRATOR_SYSTEM_PROMPT
         # Show the actual prompt that will be used (override or default).
         prompt = obj.orchestrator_prompt or ORCHESTRATOR_SYSTEM_PROMPT
         return format_html(
@@ -186,8 +204,6 @@ class AuditRunAdmin(ModelAdmin):
                 messages.ERROR,
             )
         else:
-            from celery import current_app
-
             current_app.control.revoke(run.celery_task_id, terminate=True)
             run.status = AuditRun.Status.FAILED
             run.error = "Terminated by admin user"
@@ -261,8 +277,6 @@ class AuditJobAdmin(ModelAdmin):
         # Revoke any running tasks first
         running_runs = job.runs.filter(status=AuditRun.Status.RUNNING)
         if running_runs.exists():
-            from celery import current_app
-
             for run in running_runs:
                 if run.celery_task_id:
                     current_app.control.revoke(run.celery_task_id, terminate=True)

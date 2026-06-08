@@ -26,6 +26,7 @@ def seed_default_suite(apps, schema_editor):
         name="Project Overview",
         description="Single lightweight specialist for local/token-constrained runs.",
         is_default=True,
+        model="claude-haiku-4-5",
     )
     AuditAgent.objects.create(suite=suite, position=0, enabled=True, **_DEFAULT_AGENT)
 
@@ -69,6 +70,13 @@ class Migration(migrations.Migration):
                     models.TextField(
                         blank=True,
                         help_text="Optional override of the orchestrator system prompt; blank uses the code default.",
+                    ),
+                ),
+                (
+                    "model",
+                    models.CharField(
+                        help_text="Model name (e.g. 'claude-opus-4-7'). Combined with AI_MODEL_PROVIDER at run time.",
+                        max_length=100,
                     ),
                 ),
                 (

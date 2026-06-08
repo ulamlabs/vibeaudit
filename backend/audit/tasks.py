@@ -1,8 +1,11 @@
 import git
 from celery import shared_task
+from django.conf import settings
+from django.utils import timezone
 
 from audit.ai.runner import run_pipeline
-from audit.models import AuditJob
+from audit.ai.suites import suite_to_agent_definitions
+from audit.models import AgentRunOutput, AuditJob, AuditRun
 from github_app.github import get_installation_token
 
 
@@ -36,13 +39,21 @@ def cleanup_job_dir(job_id: int) -> None:
 
 @shared_task(bind=True)
 def execute_audit_run(self, run_id: int) -> None:
-    from django.utils import timezone
-
-    from audit.ai.suites import suite_to_agent_definitions
-    from audit.models import AgentRunOutput, AuditRun
-
     run = AuditRun.objects.select_related("job", "suite").get(pk=run_id)
     job = run.job
+    suite = run.suite
+
+    # Pre-flight: reject unknown models before touching the pipeline
+    available = settings.AVAILABLE_AI_MODELS
+    if available and suite.model not in available:
+        run.status = AuditRun.Status.FAILED
+        run.error = (
+            f"Model '{suite.model}' is not in AVAILABLE_AI_MODELS. "
+            "Update the suite or add the model to settings."
+        )
+        run.finished_at = timezone.now()
+        run.save(update_fields=["status", "error", "finished_at"])
+        return
 
     # Store the Celery task ID for tracking/revocation (None if called directly in tests)
     celery_task_id = getattr(self.request, 'id', None) if hasattr(self, 'request') else None
@@ -52,8 +63,8 @@ def execute_audit_run(self, run_id: int) -> None:
     run.save(update_fields=["celery_task_id", "status", "started_at"])
 
     try:
-        agents = suite_to_agent_definitions(run.suite)
-        result = run_pipeline(job, agents, run.suite.orchestrator_prompt or None)
+        agents = suite_to_agent_definitions(suite)
+        result = run_pipeline(job, agents, suite.model, suite.orchestrator_prompt or None)
         report = result.report
 
         run.summary = report.summary
