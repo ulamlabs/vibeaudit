@@ -27,4 +27,18 @@ dependencies = [
 dev = [
     "pytest>=8.4.2",
     "pytest-django>=4.11.1",
+    "mypy>=1.14",
+    "django-stubs[compatible-mypy]>=5.1",
 ]
+
+[tool.mypy]
+plugins = ["mypy_django_plugin.main"]
+ignore_missing_imports = true
+strict = false
+
+[[tool.mypy.overrides]]
+module = ["langchain.*", "langchain_core.*", "langchain_anthropic.*"]
+follow_imports = "skip"
+
+[tool.django-stubs]
+django_settings_module = "vibeaudit.settings"

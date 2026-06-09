@@ -215,9 +215,13 @@ class AuditRun(models.Model):
         max_length=16, choices=Status.choices, default=Status.PENDING
     )
     summary = models.TextField(blank=True)
-    markdown = models.TextField(blank=True, help_text="Report body (no top-level title).")
+    markdown = models.TextField(
+        blank=True, help_text="Report body (no top-level title)."
+    )
     error = models.TextField(blank=True)
-    celery_task_id = models.CharField(max_length=36, blank=True, help_text="Celery task ID for tracking/revoking.")
+    celery_task_id = models.CharField(
+        max_length=36, blank=True, help_text="Celery task ID for tracking/revoking."
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)

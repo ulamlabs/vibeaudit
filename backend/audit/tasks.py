@@ -62,16 +62,16 @@ def execute_audit_run(self, run_id: int) -> None:
 
     try:
         agents = suite_to_agent_definitions(suite)
-        result = run_pipeline(job, agents, suite.model, suite.orchestrator_prompt or None)
+        result = run_pipeline(
+            job, agents, suite.model, suite.orchestrator_prompt or None
+        )
         report = result.report
 
         run.summary = report.summary
         run.markdown = report.markdown
         run.status = AuditRun.Status.COMPLETED
         run.finished_at = timezone.now()
-        run.save(
-            update_fields=["summary", "markdown", "status", "finished_at"]
-        )
+        run.save(update_fields=["summary", "markdown", "status", "finished_at"])
 
         AgentRunOutput.objects.bulk_create(
             [

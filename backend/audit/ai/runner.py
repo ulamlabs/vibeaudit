@@ -11,6 +11,8 @@ from deepagents import (
 )
 from deepagents.backends import CompositeBackend, FilesystemBackend, StateBackend
 
+from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
+
 from audit.ai.model import get_llm
 from audit.ai.output import PipelineReport, SubmittedReport
 from audit.ai.prompts import (
@@ -46,14 +48,18 @@ class AgentOutputError(Exception):
         self.agent_id = agent_id
         self.detail = detail
         self.cause = cause
-        super().__init__(f"Agent '{agent_id}' failed to produce a report: {detail} ({cause})")
+        super().__init__(
+            f"Agent '{agent_id}' failed to produce a report: {detail} ({cause})"
+        )
 
 
 def _make_backend(repo_path: Path) -> CompositeBackend:
     # Virtual read-only access to repo; agent internals use ephemeral StateBackend
     return CompositeBackend(
         default=StateBackend(),
-        routes={"/workspace/": FilesystemBackend(root_dir=str(repo_path), virtual_mode=True)},
+        routes={
+            "/workspace/": FilesystemBackend(root_dir=str(repo_path), virtual_mode=True)
+        },
     )
 
 
@@ -89,12 +95,13 @@ def _message_text(content) -> str:
     return str(content)
 
 
-def _extract_agent_outputs(messages) -> list[AgentOutputCapture]:
+def _extract_agent_outputs(messages: list[BaseMessage]) -> list[AgentOutputCapture]:
     """Pair each `task` tool-call (→ subagent_type) with its ToolMessage (→ output)."""
     id_to_agent: dict[str, str] = {}
     for m in messages:
-        # Only AIMessages carry tool_calls; they are TypedDicts (dict access) at runtime.
-        for tc in getattr(m, "tool_calls", None) or []:
+        if not isinstance(m, AIMessage):
+            continue
+        for tc in m.tool_calls:
             if tc["name"] != "task":
                 continue
             call_id = tc.get("id")
@@ -104,15 +111,19 @@ def _extract_agent_outputs(messages) -> list[AgentOutputCapture]:
 
     outputs: list[AgentOutputCapture] = []
     for m in messages:
-        call_id = getattr(m, "tool_call_id", None)
-        if call_id and call_id in id_to_agent:
+        if isinstance(m, ToolMessage) and (m.tool_call_id in id_to_agent):
             outputs.append(
-                AgentOutputCapture(agent_id=id_to_agent[call_id], output=_message_text(m.content))
+                AgentOutputCapture(
+                    agent_id=id_to_agent[m.tool_call_id],
+                    output=_message_text(m.content),
+                )
             )
     return outputs
 
 
-def _run_orchestrator(repo_path: Path, agents, model_name: str, orchestrator_prompt: str | None = None):
+def _run_orchestrator(
+    repo_path: Path, agents, model_name: str, orchestrator_prompt: str | None = None
+):
     model = get_llm(model_name)
     system_prompt = orchestrator_prompt or ORCHESTRATOR_SYSTEM_PROMPT
     agent = create_deep_agent(
@@ -137,10 +148,14 @@ def _run_orchestrator(repo_path: Path, agents, model_name: str, orchestrator_pro
     return submitted, _extract_agent_outputs(messages)
 
 
-def run_pipeline(job, agents, model_name: str, orchestrator_prompt: str | None = None) -> PipelineResult:
+def run_pipeline(
+    job, agents, model_name: str, orchestrator_prompt: str | None = None
+) -> PipelineResult:
     """Run the orchestrated audit over the cloned repo and return a PipelineResult."""
-    repo_name = getattr(job, "repo_full_name", None) or Path(str(job.clone_path)).name
-    submitted, agent_outputs = _run_orchestrator(job.clone_path, agents, model_name, orchestrator_prompt)
+    repo_name = job.repo_full_name or Path(str(job.clone_path)).name
+    submitted, agent_outputs = _run_orchestrator(
+        job.clone_path, agents, model_name, orchestrator_prompt
+    )
     report = PipelineReport(
         job_id=str(job.pk),
         completed_at=datetime.now(tz=timezone.utc).isoformat(),

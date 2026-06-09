@@ -40,12 +40,17 @@ def _ready_job(installation, keep_sources=True):
 
 def _result():
     report = PipelineReport(
-        job_id="1", completed_at="t", repo_name="octocat/hello",
-        summary="sum", markdown="## Body\nx",
+        job_id="1",
+        completed_at="t",
+        repo_name="octocat/hello",
+        summary="sum",
+        markdown="## Body\nx",
     )
     return PipelineResult(
         report=report,
-        agent_outputs=[AgentOutputCapture(agent_id="project_overview", output="## Repo\ns")],
+        agent_outputs=[
+            AgentOutputCapture(agent_id="project_overview", output="## Repo\ns")
+        ],
     )
 
 
@@ -80,8 +85,10 @@ def test_execute_audit_run_marks_failed_on_error(installation, suite):
 def test_execute_audit_run_keeps_sources_by_default(installation, suite):
     job = _ready_job(installation, keep_sources=True)
     run = AuditRun.objects.create(job=job, suite=suite)
-    with patch("audit.tasks.run_pipeline", return_value=_result()), \
-         patch.object(AuditJob, "cleanup") as cleanup:
+    with (
+        patch("audit.tasks.run_pipeline", return_value=_result()),
+        patch.object(AuditJob, "cleanup") as cleanup,
+    ):
         execute_audit_run(run.pk)
     cleanup.assert_not_called()
 
@@ -90,8 +97,10 @@ def test_execute_audit_run_keeps_sources_by_default(installation, suite):
 def test_execute_audit_run_cleans_up_when_not_keeping_sources(installation, suite):
     job = _ready_job(installation, keep_sources=False)
     run = AuditRun.objects.create(job=job, suite=suite)
-    with patch("audit.tasks.run_pipeline", return_value=_result()), \
-         patch.object(AuditJob, "cleanup") as cleanup:
+    with (
+        patch("audit.tasks.run_pipeline", return_value=_result()),
+        patch.object(AuditJob, "cleanup") as cleanup,
+    ):
         execute_audit_run(run.pk)
     cleanup.assert_called_once()
 
@@ -101,8 +110,10 @@ def test_execute_audit_run_fails_when_model_not_in_whitelist(installation):
     suite = AuditSuite.objects.create(name="Bad", model="claude-unknown-99")
     job = _ready_job(installation)
     run = AuditRun.objects.create(job=job, suite=suite)
-    with patch("audit.tasks.run_pipeline") as mock_pipeline, \
-         override_settings(AVAILABLE_AI_MODELS=["claude-sonnet-4-6"]):
+    with (
+        patch("audit.tasks.run_pipeline") as mock_pipeline,
+        override_settings(AVAILABLE_AI_MODELS=["claude-sonnet-4-6"]),
+    ):
         execute_audit_run(run.pk)
     mock_pipeline.assert_not_called()
     run.refresh_from_db()

@@ -37,6 +37,7 @@ def test_rendered_output_sanitizes_and_renders():
     assert "<strong>bold</strong>" in html
     assert "<script>" not in html
 
+
 def _agent_form(*, deleted=False, empty=False, pk=None, position=0):
     form = MagicMock()
     form.cleaned_data = {} if empty else {"DELETE": deleted}
@@ -49,11 +50,11 @@ def _agent_form(*, deleted=False, empty=False, pk=None, position=0):
 def test_save_formset_numbers_new_agents_by_row_order():
     admin_obj = AuditSuiteAdmin(AuditSuite, site)
     forms = [
-        _agent_form(),               # -> 0
-        _agent_form(),               # -> 1
-        _agent_form(deleted=True),   # skipped (marked for deletion)
-        _agent_form(empty=True),     # skipped (blank extra row)
-        _agent_form(),               # -> 2
+        _agent_form(),  # -> 0
+        _agent_form(),  # -> 1
+        _agent_form(deleted=True),  # skipped (marked for deletion)
+        _agent_form(empty=True),  # skipped (blank extra row)
+        _agent_form(),  # -> 2
     ]
     formset = MagicMock()
     formset.model = AuditAgent

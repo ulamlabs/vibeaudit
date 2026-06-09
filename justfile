@@ -71,12 +71,19 @@ migrate:
 test-be:
     cd backend && uv run --group dev python -m pytest
 
+# Type-check backend with mypy
+typecheck-be:
+    cd backend && uv run mypy audit github_app vibeaudit
+
 # Run frontend checks
 test-fe:
     cd frontend && npm run typecheck
 
 # Run all tests
 test: test-be test-fe
+
+# Run all type checks
+typecheck: typecheck-be test-fe
 
 # Lint backend with Ruff
 lint:

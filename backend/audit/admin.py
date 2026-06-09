@@ -96,14 +96,15 @@ class AuditSuiteAdmin(ModelAdmin):
         return format_html(
             '<pre style="white-space: pre-wrap; word-break: break-word; '
             'font-size: 0.85em; max-height: 400px; overflow-y: auto">{}</pre>',
-            prompt
+            prompt,
         )
 
     def save_formset(self, request, form, formset, change):
         if formset.model is AuditAgent:
             # New rows get next position; existing rows keep their (drag-set) position
             agent_forms = [
-                f for f in formset.forms
+                f
+                for f in formset.forms
                 if f.cleaned_data and not f.cleaned_data.get("DELETE")
             ]
             existing = [f.instance.position for f in agent_forms if f.instance.pk]
@@ -271,7 +272,7 @@ class AuditJobAdmin(ModelAdmin):
     @action(description="Delete sources", url_path="cleanup")
     def cleanup_job(self, request, object_id):
         job = AuditJob.objects.get(pk=object_id)
-        
+
         # Revoke any running tasks first
         running_runs = job.runs.filter(status=AuditRun.Status.RUNNING)
         if running_runs.exists():
@@ -285,9 +286,11 @@ class AuditJobAdmin(ModelAdmin):
                 f"Terminated all running audits for job #{job.pk}.",
                 messages.WARNING,
             )
-        
+
         job.cleanup()
-        self.message_user(request, f"Sources deleted for job #{job.pk}.", messages.WARNING)
+        self.message_user(
+            request, f"Sources deleted for job #{job.pk}.", messages.WARNING
+        )
         return self._redirect_to_change(request, object_id)
 
     @admin.action(description="Delete sources for selected jobs")

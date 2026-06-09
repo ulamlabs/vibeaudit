@@ -217,7 +217,9 @@ GITHUB_APP_SLUG = env("GITHUB_APP_SLUG", default="vibeaudit")
 ALLOW_UNAUTHENTICATED_AUDIT = env.bool("ALLOW_UNAUTHENTICATED_AUDIT", default=False)
 
 # AI / LLM settings
-AI_MODEL_PROVIDER = env("AI_MODEL_PROVIDER", default="anthropic")  # "anthropic" | "openai" | …
+AI_MODEL_PROVIDER = env(
+    "AI_MODEL_PROVIDER", default="anthropic"
+)  # "anthropic" | "openai" | …
 AVAILABLE_AI_MODELS: list[str] = env.list(
     "AVAILABLE_AI_MODELS",
     default=[
@@ -242,9 +244,7 @@ AI_MAX_TOKENS = env.int("AI_MAX_TOKENS", default=0)
 AUDIT_TASK_SOFT_TIME_LIMIT_SECONDS = env.int(
     "AUDIT_TASK_SOFT_TIME_LIMIT_SECONDS", default=600
 )
-AUDIT_TASK_TIME_LIMIT_SECONDS = env.int(
-    "AUDIT_TASK_TIME_LIMIT_SECONDS", default=660
-)
+AUDIT_TASK_TIME_LIMIT_SECONDS = env.int("AUDIT_TASK_TIME_LIMIT_SECONDS", default=660)
 
 
 # Default primary key field type

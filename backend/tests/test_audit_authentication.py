@@ -20,8 +20,8 @@ def build_client_with_installation(installation_id: int) -> APIClient:
     "allow_unauthenticated, authenticated, expected_status",
     [
         (False, False, 403),  # unauthenticated blocked when feature disabled
-        (True, False, 201),   # unauthenticated allowed when feature enabled
-        (False, True, 201),   # authenticated user bypasses setting
+        (True, False, 201),  # unauthenticated allowed when feature enabled
+        (False, True, 201),  # authenticated user bypasses setting
     ],
 )
 @pytest.mark.django_db

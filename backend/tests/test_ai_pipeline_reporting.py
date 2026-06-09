@@ -1,8 +1,7 @@
 from unittest.mock import patch
 
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, ToolMessage
 
-from audit.ai.agents import AgentDefinition, get_audit_agents
 from audit.ai.output import SubmittedReport
 from audit.ai.runner import (
     AgentOutputCapture,
@@ -10,17 +9,6 @@ from audit.ai.runner import (
     _extract_agent_outputs,
     run_pipeline,
 )
-
-
-def test_get_audit_agents_is_unique_and_nonempty() -> None:
-    agents = get_audit_agents()
-    assert len(agents) >= 1
-    ids = [a.id for a in agents]
-    assert len(ids) == len(set(ids))
-    assert all(isinstance(a, AgentDefinition) for a in agents)
-    assert all(
-        a.prompt.strip() and a.name.strip() and a.description.strip() for a in agents
-    )
 
 
 class _FakeJob:
@@ -34,40 +22,6 @@ class _FakeJob:
             return "/tmp/widgets"
 
     clone_path = _Path()
-
-
-def test_run_pipeline_builds_report_from_orchestrator_holder() -> None:
-    submitted = SubmittedReport(summary="Some risk.", markdown="## Findings\nstuff")
-    with patch("audit.ai.runner._run_orchestrator", return_value=(submitted, [])):
-        result = run_pipeline(_FakeJob(), agents=[], model_name="claude-sonnet-4-6")
-    report = result.report
-    assert report.job_id == "job-xyz"
-    assert report.repo_name == "acme/widgets"
-    assert report.summary == "Some risk."
-    assert report.markdown == "## Findings\nstuff"
-    assert report.completed_at
-
-
-def test_extract_agent_outputs_pairs_task_calls_to_tool_messages() -> None:
-    messages = [
-        HumanMessage(content="run"),
-        AIMessage(
-            content="",
-            tool_calls=[
-                {
-                    "name": "task",
-                    "args": {"subagent_type": "project_overview", "description": "go"},
-                    "id": "call_1",
-                }
-            ],
-        ),
-        ToolMessage(content="## Repo\nstuff", tool_call_id="call_1"),
-        AIMessage(content="done"),
-    ]
-    outputs = _extract_agent_outputs(messages)
-    assert outputs == [
-        AgentOutputCapture(agent_id="project_overview", output="## Repo\nstuff")
-    ]
 
 
 def test_extract_agent_outputs_handles_block_content() -> None:
@@ -114,11 +68,14 @@ def test_extract_agent_outputs_ignores_orphaned_task_call() -> None:
 
 
 def test_run_pipeline_returns_result_with_report_and_outputs() -> None:
-    submitted = SubmittedReport(summary="ok", markdown="## B\nx")
+    submitted = SubmittedReport(summary="Some risk.", markdown="## Findings\nstuff")
     captures = [AgentOutputCapture(agent_id="project_overview", output="## Repo\ns")]
     with patch("audit.ai.runner._run_orchestrator", return_value=(submitted, captures)):
         result = run_pipeline(_FakeJob(), agents=[], model_name="claude-sonnet-4-6")
     assert isinstance(result, PipelineResult)
-    assert result.report.summary == "ok"
+    assert result.report.job_id == "job-xyz"
     assert result.report.repo_name == "acme/widgets"
+    assert result.report.summary == "Some risk."
+    assert result.report.markdown == "## Findings\nstuff"
+    assert result.report.completed_at
     assert result.agent_outputs == captures
