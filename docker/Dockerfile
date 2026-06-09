@@ -14,7 +14,7 @@ ENV VITE_SENTRY_DSN=$FRONTEND_SENTRY_DSN
 RUN npm run build
 
 # Backend build stage
-FROM ghcr.io/astral-sh/uv:python3.13-alpine AS backend
+FROM ghcr.io/astral-sh/uv:python3.14-trixie-slim AS backend
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -22,7 +22,7 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-RUN apk add --no-cache git
+RUN apt-get update && apt-get install -y --no-install-recommends git ripgrep && rm -rf /var/lib/apt/lists/*
 
 # Install only third-party backend dependencies with lockfile in the cacheable layer.
 COPY backend/pyproject.toml backend/uv.lock ./

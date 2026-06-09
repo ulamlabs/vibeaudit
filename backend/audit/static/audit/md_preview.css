@@ -1,0 +1,101 @@
+/* Scoped styling for rendered audit-report markdown in the admin.
+   Unfold's Tailwind "preflight" resets default element styles, so headings/lists/etc.
+   render unstyled without this. Uses neutral gray tones (rgba) so it reads well in both
+   the light and dark admin themes; intentionally does not set background/text color. */
+
+.md-preview {
+  line-height: 1.6;
+  font-size: 0.95rem;
+  word-break: break-word;
+}
+
+.md-preview > :first-child {
+  margin-top: 0;
+}
+
+.md-preview h1,
+.md-preview h2,
+.md-preview h3,
+.md-preview h4,
+.md-preview h5,
+.md-preview h6 {
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 1.2em 0 0.6em;
+}
+
+.md-preview h1 { font-size: 1.6em; }
+.md-preview h2 {
+  font-size: 1.35em;
+  padding-bottom: 0.2em;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.25);
+}
+.md-preview h3 { font-size: 1.15em; }
+.md-preview h4 { font-size: 1em; }
+.md-preview h5,
+.md-preview h6 { font-size: 0.9em; }
+
+.md-preview p { margin: 0.6em 0; }
+
+.md-preview ul,
+.md-preview ol {
+  margin: 0.6em 0;
+  padding-left: 1.6em;
+}
+.md-preview ul { list-style: disc; }
+.md-preview ol { list-style: decimal; }
+.md-preview li { margin: 0.2em 0; }
+.md-preview li > ul,
+.md-preview li > ol { margin: 0.2em 0; }
+
+.md-preview code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: rgba(128, 128, 128, 0.15);
+}
+
+.md-preview pre {
+  margin: 0.8em 0;
+  padding: 0.8em 1em;
+  border-radius: 6px;
+  overflow-x: auto;
+  background: rgba(128, 128, 128, 0.12);
+}
+.md-preview pre code {
+  padding: 0;
+  background: none;
+}
+
+.md-preview blockquote {
+  margin: 0.8em 0;
+  padding: 0.2em 1em;
+  border-left: 3px solid rgba(128, 128, 128, 0.4);
+  opacity: 0.85;
+}
+
+.md-preview table {
+  border-collapse: collapse;
+  margin: 0.8em 0;
+}
+.md-preview th,
+.md-preview td {
+  padding: 0.4em 0.7em;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+}
+.md-preview th {
+  font-weight: 600;
+  background: rgba(128, 128, 128, 0.12);
+}
+
+.md-preview a {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+.md-preview hr {
+  margin: 1.2em 0;
+  border: none;
+  border-top: 1px solid rgba(128, 128, 128, 0.3);
+}

@@ -1,9 +1,11 @@
-import time
-
 import git
 from celery import shared_task
+from django.conf import settings
+from django.utils import timezone
 
-from audit.models import AuditJob
+from audit.ai.runner import run_pipeline
+from audit.ai.suites import suite_to_agent_definitions
+from audit.models import AgentRunOutput, AuditJob, AuditRun
 from github_app.github import get_installation_token
 
 
@@ -27,25 +29,63 @@ def clone_repo(job_id: int) -> None:
 
 
 @shared_task
-def run_audit(job_id: int) -> None:
-    job = AuditJob.objects.get(pk=job_id)
-    job.transition_to(AuditJob.State.RUNNING)
-
-    try:
-        # TODO: replace with real audit logic
-        time.sleep(5)
-        job.report = "Yey!"
-        job.save(update_fields=["report"])
-        job.transition_to(AuditJob.State.COMPLETED)
-    finally:
-        # Always clean up the clone regardless of outcome — report is persisted to DB above.
-        cleanup_job_dir.delay(job_id)
-
-
-@shared_task
 def cleanup_job_dir(job_id: int) -> None:
     try:
         job = AuditJob.objects.get(pk=job_id)
     except AuditJob.DoesNotExist:
         return
     job.delete_clone()
+
+
+@shared_task(bind=True)
+def execute_audit_run(self, run_id: int) -> None:
+    run = AuditRun.objects.select_related("job", "suite").get(pk=run_id)
+    job = run.job
+    suite = run.suite
+
+    # Pre-flight: reject unknown models before touching the pipeline
+    available = settings.AVAILABLE_AI_MODELS
+    if available and suite.model not in available:
+        run.status = AuditRun.Status.FAILED
+        run.error = (
+            f"Model '{suite.model}' is not in AVAILABLE_AI_MODELS. "
+            "Update the suite or add the model to settings."
+        )
+        run.finished_at = timezone.now()
+        run.save(update_fields=["status", "error", "finished_at"])
+        return
+
+    # Store the Celery task ID for tracking/revocation (None if called directly in tests)
+    run.status = AuditRun.Status.RUNNING
+    run.started_at = timezone.now()
+    run.save(update_fields=["status", "started_at"])
+
+    try:
+        agents = suite_to_agent_definitions(suite)
+        result = run_pipeline(
+            job, agents, suite.model, suite.orchestrator_prompt or None
+        )
+        report = result.report
+
+        run.summary = report.summary
+        run.markdown = report.markdown
+        run.status = AuditRun.Status.COMPLETED
+        run.finished_at = timezone.now()
+        run.save(update_fields=["summary", "markdown", "status", "finished_at"])
+
+        AgentRunOutput.objects.bulk_create(
+            [
+                AgentRunOutput(
+                    run=run, agent_id=cap.agent_id, output=cap.output, position=i
+                )
+                for i, cap in enumerate(result.agent_outputs)
+            ]
+        )
+    except Exception as exc:  # noqa: BLE001
+        run.status = AuditRun.Status.FAILED
+        run.error = str(exc)
+        run.finished_at = timezone.now()
+        run.save(update_fields=["status", "error", "finished_at"])
+    finally:
+        if not job.keep_sources:
+            job.cleanup()

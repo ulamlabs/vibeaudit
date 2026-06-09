@@ -8,6 +8,8 @@ class StartAuditSerializer(serializers.Serializer):
 
     repo_full_name = serializers.CharField(required=True)
     email = serializers.EmailField(required=True)
+    # Honored only for staff submitters; the view forces False for everyone else.
+    keep_sources = serializers.BooleanField(required=False)
 
     def validate_repo_full_name(self, value: str) -> str:
         repo_full_name = value.strip()

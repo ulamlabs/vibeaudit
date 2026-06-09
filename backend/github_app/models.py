@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 
 from github_app.github import InstallationNotFoundError, delete_installation
 
@@ -43,7 +44,6 @@ class Installation(models.Model):
 
     def mark_remote_deleted(self) -> None:
         """Mark the installation as no longer existing on GitHub."""
-        from django.utils import timezone
         self.remote_deleted_at = timezone.now()
         self.save(update_fields=["remote_deleted_at"])
 

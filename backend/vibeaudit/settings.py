@@ -216,6 +216,37 @@ else:
 GITHUB_APP_SLUG = env("GITHUB_APP_SLUG", default="vibeaudit")
 ALLOW_UNAUTHENTICATED_AUDIT = env.bool("ALLOW_UNAUTHENTICATED_AUDIT", default=False)
 
+# AI / LLM settings
+AI_MODEL_PROVIDER = env(
+    "AI_MODEL_PROVIDER", default="anthropic"
+)  # "anthropic" | "openai" | …
+AVAILABLE_AI_MODELS: list[str] = env.list(
+    "AVAILABLE_AI_MODELS",
+    default=[
+        "claude-haiku-4-5",
+        "claude-sonnet-4-6",
+        "claude-opus-4-7",
+    ],
+)
+AI_ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY", default="")
+# Requests per second passed to InMemoryRateLimiter.
+# NOTE: this limits requests/s, NOT tokens/minute. It won't reliably prevent
+# Anthropic 429s caused by the tokens-per-minute cap. Use AI_MAX_TOKENS to
+# reduce token usage instead.
+# 0 disables rate limiting.
+AI_REQUESTS_PER_SECOND = env.float("AI_REQUESTS_PER_SECOND", default=0)
+# Hard cap on output tokens per LLM call. Helps stay within tokens/min quota.
+# 0 = use provider default (no explicit cap).
+AI_MAX_TOKENS = env.int("AI_MAX_TOKENS", default=0)
+
+# Defaults for Celery audit execution time limits.
+# Soft limit raises SoftTimeLimitExceeded; hard limit forcefully terminates.
+AUDIT_TASK_SOFT_TIME_LIMIT_SECONDS = env.int(
+    "AUDIT_TASK_SOFT_TIME_LIMIT_SECONDS", default=600
+)
+AUDIT_TASK_TIME_LIMIT_SECONDS = env.int("AUDIT_TASK_TIME_LIMIT_SECONDS", default=660)
+
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 

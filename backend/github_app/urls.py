@@ -1,6 +1,12 @@
 from django.urls import path
 
-from github_app.views import InstallationDeleteView, InstallationsView, ReposView, connect, setup
+from github_app.views import (
+    InstallationDeleteView,
+    InstallationsView,
+    ReposView,
+    connect,
+    setup,
+)
 
 urlpatterns = [
     path("connect", connect, name="github_connect"),

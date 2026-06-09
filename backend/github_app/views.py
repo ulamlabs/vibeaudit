@@ -1,6 +1,7 @@
 """
 GitHub App OAuth views.
 """
+
 import secrets
 
 from django.conf import settings
@@ -62,8 +63,10 @@ def setup(request: HttpRequest) -> HttpResponse:
         installation_id_int = int(installation_id)
         if installation_id_int <= 0:
             raise ValueError()
-    except (ValueError, TypeError):
-        return HttpResponse("Invalid installation_id (must be positive integer)", status=400)
+    except ValueError, TypeError:
+        return HttpResponse(
+            "Invalid installation_id (must be positive integer)", status=400
+        )
 
     # Fetch installation metadata from GitHub and persist locally.
     try:
@@ -120,7 +123,9 @@ class InstallationsView(APIView):
             check_installation_active(installation_id)
         except InstallationNotFoundError:
             installation.mark_remote_deleted()
-            return Response({"error": "Installation no longer exists on GitHub"}, status=404)
+            return Response(
+                {"error": "Installation no longer exists on GitHub"}, status=404
+            )
         except Exception:
             # Network errors etc. — don't penalise the user; treat as still active.
             pass
@@ -156,7 +161,9 @@ class InstallationDeleteView(APIView):
         # Block if active jobs are in progress.
         if installation.has_active_audit_jobs():
             return Response(
-                {"error": "Cannot delete installation while audit jobs are in progress"},
+                {
+                    "error": "Cannot delete installation while audit jobs are in progress"
+                },
                 status=400,
             )
 
@@ -187,7 +194,9 @@ class ReposView(APIView):
                 installation_id=installation_id, remote_deleted_at__isnull=True
             )
         except Installation.DoesNotExist:
-            return Response({"error": "Installation not found or has been deleted"}, status=401)
+            return Response(
+                {"error": "Installation not found or has been deleted"}, status=401
+            )
 
         try:
             repos = list_repos(installation_id)
@@ -195,6 +204,10 @@ class ReposView(APIView):
             return Response({"repos": serializer.data})
         except InstallationNotFoundError:
             installation.mark_remote_deleted()
-            return Response({"error": "Installation no longer exists on GitHub"}, status=401)
+            return Response(
+                {"error": "Installation no longer exists on GitHub"}, status=401
+            )
         except Exception:
-            return Response({"error": "Failed to load repositories. Please try again."}, status=503)
+            return Response(
+                {"error": "Failed to load repositories. Please try again."}, status=503
+            )
