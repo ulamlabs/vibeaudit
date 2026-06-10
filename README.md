@@ -69,6 +69,14 @@ Go to **Settings → Developer settings → GitHub Apps → New GitHub App**:
 
 Generate a **private key** (`.pem`) and save it as `backend/secrets/github-app.pem` (gitignored). Note the **App ID** and **App slug** (`github.com/apps/<slug>`).
 
+If you need to pass the private key as an environment variable (e.g., in SOPS or `.env` files), convert it to a single-line format with escaped newlines:
+
+```bash
+python3 backend/scripts/pem_to_env.py backend/secrets/github-app.pem | pbcopy
+```
+
+This copies the key to your clipboard, ready to paste into environment config.
+
 #### 3. Configure
 
 Add to `backend/.env`:
