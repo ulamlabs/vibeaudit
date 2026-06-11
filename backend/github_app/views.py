@@ -7,6 +7,8 @@ import secrets
 from django.conf import settings
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import redirect
+from rest_framework.decorators import api_view
+from rest_framework.decorators import authentication_classes
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -22,6 +24,8 @@ from github_app.models import Installation
 from github_app.serializers import InstallationSerializer, RepoSerializer
 
 
+@api_view(["GET"])
+@authentication_classes([AuditAuthentication])
 def connect(request: HttpRequest) -> HttpResponse:
     """
     Initiate GitHub App installation flow.
@@ -41,6 +45,8 @@ def connect(request: HttpRequest) -> HttpResponse:
     return HttpResponseRedirect(github_install_url)
 
 
+@api_view(["GET"])
+@authentication_classes([AuditAuthentication])
 def setup(request: HttpRequest) -> HttpResponse:
     """
     GitHub App installation callback.
