@@ -1,6 +1,7 @@
 import git
 from celery import shared_task
 from django.conf import settings
+from django.core.mail import EmailMessage
 from django.utils import timezone
 
 from audit.ai.runner import run_pipeline
@@ -35,6 +36,39 @@ def cleanup_job_dir(job_id: int) -> None:
     except AuditJob.DoesNotExist:
         return
     job.delete_clone()
+
+
+_PDF_ATTACHMENT_SIZE_LIMIT = 10 * 1024 * 1024  # 10 MB
+
+
+def _send_report_email(run) -> None:
+    """Send PDF report to job.email. No-op if email is blank.
+
+    If the PDF exceeds _PDF_ATTACHMENT_SIZE_LIMIT, the email is sent without
+    an attachment and the recipient is asked to contact the administrator.
+    """
+    if not run.job.email:
+        return
+    from audit.pdf import render_pdf  # lazy import — requires system pango/gobject libs
+    pdf_bytes = render_pdf(run)
+    if len(pdf_bytes) <= _PDF_ATTACHMENT_SIZE_LIMIT:
+        msg = EmailMessage(
+            subject=f"VibeAudit Report — {run.job.repo_full_name}",
+            body="Your audit report is attached.",
+            to=[run.job.email],
+        )
+        msg.attach("report.pdf", pdf_bytes, "application/pdf")
+    else:
+        msg = EmailMessage(
+            subject=f"VibeAudit Report — {run.job.repo_full_name}",
+            body=(
+                "Your audit has completed.\n\n"
+                "The PDF report is too large to attach. "
+                "Please contact the administrator to download it."
+            ),
+            to=[run.job.email],
+        )
+    msg.send()
 
 
 @shared_task(bind=True)
@@ -81,6 +115,8 @@ def execute_audit_run(self, run_id: int) -> None:
                 for i, cap in enumerate(result.agent_outputs)
             ]
         )
+
+        _send_report_email(run)
     except Exception as exc:  # noqa: BLE001
         run.status = AuditRun.Status.FAILED
         run.error = str(exc)

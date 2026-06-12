@@ -129,6 +129,14 @@ class AuditSuite(models.Model):
         blank=True,
         help_text="Optional override of the orchestrator system prompt; blank uses the code default.",
     )
+    report_template = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "Custom HTML report template for PDF generation. "
+            "Leave blank to use the REPORT_TEMPLATE_PATH env var or the bundled default."
+        ),
+    )
     model = models.CharField(
         max_length=100,
         help_text="Model name (e.g. 'claude-opus-4-7'). Combined with AI_MODEL_PROVIDER at run time.",

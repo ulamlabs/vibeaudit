@@ -5,6 +5,7 @@ from django.conf import settings as django_settings
 from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group, User
+from django.http import HttpResponse
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.html import format_html
@@ -157,7 +158,20 @@ class AuditRunAdmin(ModelAdmin):
         "finished_at",
         "celery_task_id",
     ]
-    actions_detail = ["terminate_run"]
+    actions_detail = ["terminate_run", "download_pdf"]
+
+    @action(description="Download PDF", url_path="download-pdf")
+    def download_pdf(self, request, object_id):
+        from audit.pdf import render_pdf
+        run = AuditRun.objects.get(pk=object_id)
+        try:
+            pdf_bytes = render_pdf(run)
+        except Exception as exc:
+            self.message_user(request, f"PDF generation failed: {exc}", messages.ERROR)
+            return redirect(reverse("admin:audit_auditrun_change", args=[object_id]))
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="report-{run.pk}.pdf"'
+        return response
 
     def get_fields(self, request, obj=None):
         if obj is None:

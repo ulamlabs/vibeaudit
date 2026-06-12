@@ -246,6 +246,10 @@ AUDIT_TASK_SOFT_TIME_LIMIT_SECONDS = env.int(
 )
 AUDIT_TASK_TIME_LIMIT_SECONDS = env.int("AUDIT_TASK_TIME_LIMIT_SECONDS", default=660)
 
+# Path to a custom HTML report template for PDF generation.
+# Falls back to AuditSuite.report_template field or bundled default.
+REPORT_TEMPLATE_PATH = env("REPORT_TEMPLATE_PATH", default="")
+
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
