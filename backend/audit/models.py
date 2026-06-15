@@ -126,12 +126,12 @@ class AuditJob(models.Model):
 # Adding new variables is always safe; removing or renaming is a breaking change.
 ALLOWED_EMAIL_TEMPLATE_VARS = frozenset(
     {
-        "repo_name",   # job.repo_full_name
-        "summary",     # run.summary
+        "repo_name",  # job.repo_full_name
+        "summary",  # run.summary
         "run_status",  # run.status  (e.g. 'completed' / 'failed')
         "suite_name",  # suite.name
         "pdf_attached",  # bool — True when PDF was successfully attached
-        "site_url",    # settings.SITE_URL or blank
+        "site_url",  # settings.SITE_URL or blank
     }
 )
 

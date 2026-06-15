@@ -3,43 +3,61 @@
 from django.db import migrations, models
 
 
-class Migration(migrations.Migration):
+def create_audit_notifications_group(apps, schema_editor):
+    Group = apps.get_model("auth", "Group")
+    Group.objects.get_or_create(name="audit_notifications")
 
+
+def delete_audit_notifications_group(apps, schema_editor):
+    Group = apps.get_model("auth", "Group")
+    Group.objects.filter(name="audit_notifications").delete()
+
+
+class Migration(migrations.Migration):
     dependencies = [
-        ('audit', '0001_initial'),
+        ("audit", "0001_initial"),
+        ("auth", "0012_alter_user_first_name_max_length"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='auditsuite',
-            name='report_template',
-            field=models.TextField(blank=True, default='', help_text='Custom HTML report template for PDF generation. Leave blank to use the REPORT_TEMPLATE_PATH env var or the bundled default.'),
-        ),
-        migrations.AddField(
-            model_name='auditsuite',
-            name='email_subject',
-            field=models.CharField(
-                blank=True,
-                default='',
-                max_length=500,
-                help_text=(
-                    'Django template syntax for the email subject line. '
-                    'Available vars: job, suite, run. '
-                    'Blank uses the built-in default.'
-                ),
-            ),
-        ),
-        migrations.AddField(
-            model_name='auditsuite',
-            name='email_html_body',
+            model_name="auditsuite",
+            name="report_template",
             field=models.TextField(
                 blank=True,
-                default='',
+                default="",
+                help_text="Custom HTML report template for PDF generation. Leave blank to use the REPORT_TEMPLATE_PATH env var or the bundled default.",
+            ),
+        ),
+        migrations.AddField(
+            model_name="auditsuite",
+            name="email_subject",
+            field=models.CharField(
+                blank=True,
+                default="",
+                max_length=500,
                 help_text=(
-                    'Full HTML email body with Django template syntax. '
-                    'Available vars: job, suite, run, pdf_attached, site_url. '
-                    'Blank uses the compiled MJML template from source.'
+                    "Django template syntax for the email subject line. "
+                    "Available vars: job, suite, run. "
+                    "Blank uses the built-in default."
                 ),
             ),
+        ),
+        migrations.AddField(
+            model_name="auditsuite",
+            name="email_html_body",
+            field=models.TextField(
+                blank=True,
+                default="",
+                help_text=(
+                    "Full HTML email body with Django template syntax. "
+                    "Available vars: job, suite, run, pdf_attached, site_url. "
+                    "Blank uses the compiled MJML template from source."
+                ),
+            ),
+        ),
+        migrations.RunPython(
+            create_audit_notifications_group,
+            reverse_code=delete_audit_notifications_group,
         ),
     ]

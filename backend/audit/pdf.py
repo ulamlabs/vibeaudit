@@ -36,4 +36,5 @@ def render_pdf(run) -> bytes:
     else:
         html_string = render_to_string("report/report.html", context)
     from weasyprint import HTML  # lazy import — requires system pango/gobject libs
+
     return HTML(string=html_string).write_pdf()

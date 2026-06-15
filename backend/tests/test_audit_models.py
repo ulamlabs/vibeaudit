@@ -188,6 +188,7 @@ def test_suite_to_agent_definitions_only_enabled_in_order():
 # AuditSuite.clean() — email template variable validation
 # ---------------------------------------------------------------------------
 
+
 def _suite(**kwargs):
     """Build an unsaved AuditSuite with required fields."""
     defaults = {"name": "Test", "model": "test-model"}
@@ -235,4 +236,3 @@ def test_email_template_invalid_syntax_raises(field):
 def test_email_template_only_repo_name_valid():
     suite = _suite(email_html_body="Your report for {{ repo_name }} is ready.")
     suite.full_clean()  # should not raise
-

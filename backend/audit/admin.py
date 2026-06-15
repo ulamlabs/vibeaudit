@@ -16,6 +16,7 @@ from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationFo
 
 from audit.ai.prompts import ORCHESTRATOR_SYSTEM_PROMPT
 from audit.models import AgentRunOutput, AuditAgent, AuditJob, AuditRun, AuditSuite
+from audit.pdf import render_pdf
 from audit.rendering import render_markdown_safe
 
 
@@ -188,7 +189,6 @@ class AuditRunAdmin(ModelAdmin):
 
     @action(description="Download PDF", url_path="download-pdf")
     def download_pdf(self, request, object_id):
-        from audit.pdf import render_pdf
         run = AuditRun.objects.get(pk=object_id)
         try:
             pdf_bytes = render_pdf(run)

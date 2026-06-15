@@ -198,6 +198,13 @@ ANYMAIL = {
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="webmaster@localhost")
 SITE_URL = env("SITE_URL", default="")
 
+# Optional directory that is checked *before* the bundled email templates.
+# Set to an absolute path to override individual templates without replacing all of them.
+_extra_email_templates_dir = env("EXTRA_EMAIL_TEMPLATES_DIR", default="")
+EXTRA_EMAIL_TEMPLATES_DIR = (
+    Path(_extra_email_templates_dir) if _extra_email_templates_dir else None
+)
+
 
 UNFOLD = {
     "SITE_TITLE": env("ADMIN_SITE_TITLE", default="VibeAudit"),

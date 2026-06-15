@@ -11,6 +11,7 @@ alias dbe := dev-be     # Dev Back End
 alias dfe := dev-fe     # Dev Front End
 alias dcu := dc-up      # Docker Compose Up
 alias dcd := dc-down    # Docker Compose Down
+alias ce  := compile-email
 
 # Default recipe
 default:
@@ -67,11 +68,11 @@ dc-shell:
 migrate:
     cd backend && uv run python manage.py migrate
 
-# Compile MJML email source to Django HTML template (run after editing src/report_email.mjml)
+# Compile all MJML email sources to Django HTML templates (run after editing any src/*.mjml)
 compile-email:
     npx mjml backend/audit/templates/email/src/report_email.mjml -o backend/audit/templates/email/report_email.html
-
-alias ce := compile-email
+    npx mjml backend/audit/templates/email/src/failure_email.mjml -o backend/audit/templates/email/failure_email.html
+    npx mjml backend/audit/templates/email/src/new_submission_email.mjml -o backend/audit/templates/email/new_submission_email.html
 
 # Run backend tests (pytest-style)
 test-be:

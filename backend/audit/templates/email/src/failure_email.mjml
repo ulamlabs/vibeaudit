@@ -1,0 +1,46 @@
+<mjml>
+  <mj-head>
+    <mj-title>VibeAudit — Audit Failed</mj-title>
+    <mj-preview>Your audit for {{ repo_name }} could not be completed</mj-preview>
+  </mj-head>
+
+  <mj-body>
+
+    <mj-section>
+      <mj-column>
+        <mj-text font-weight="bold" font-size="20px">
+          Audit Failed
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section>
+      <mj-column>
+        <mj-text>
+          We encountered an error while running the audit for your repository and were unable to complete it.
+        </mj-text>
+        <mj-text>
+          <strong>Repository:</strong> {{ repo_name }}<br />
+          <strong>Reference ID:</strong> {{ run_id }}
+        </mj-text>
+        <mj-text>
+          Please contact the administrator and quote the reference ID above so we can investigate.
+        </mj-text>
+        {% if site_url %}
+        <mj-text>
+          Visit <a href="{{ site_url }}">{{ site_url }}</a> to submit a new audit or check your status.
+        </mj-text>
+        {% endif %}
+      </mj-column>
+    </mj-section>
+
+    <mj-section>
+      <mj-column>
+        <mj-text font-size="11px">
+          You received this email because an audit was requested for <strong>{{ repo_name }}</strong>.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+  </mj-body>
+</mjml>
