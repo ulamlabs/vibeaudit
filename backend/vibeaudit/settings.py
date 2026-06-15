@@ -196,6 +196,7 @@ ANYMAIL = {
 }
 
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="webmaster@localhost")
+SITE_URL = env("SITE_URL", default="")
 
 
 UNFOLD = {

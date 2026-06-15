@@ -1,7 +1,8 @@
 import git
 from celery import shared_task
 from django.conf import settings
-from django.core.mail import EmailMessage
+from django.core.mail import EmailMultiAlternatives
+from django.template import Context, Template
 from django.utils import timezone
 
 from audit.ai.runner import run_pipeline
@@ -40,34 +41,73 @@ def cleanup_job_dir(job_id: int) -> None:
 
 _PDF_ATTACHMENT_SIZE_LIMIT = 10 * 1024 * 1024  # 10 MB
 
+_BUNDLED_EMAIL_TEMPLATE = (
+    settings.BASE_DIR
+    / "audit"
+    / "templates"
+    / "email"
+    / "report_email.html"
+)
+
+_DEFAULT_SUBJECT = "VibeAudit Report — {{ repo_name }}"
+
+
+def _render_email(run, pdf_attached: bool) -> tuple[str, str, str]:
+    """Return (subject, plain_body, html_body) rendered for *run*.
+
+    Resolution order for html_body:
+      1. Non-blank email_html_body on the run's suite (admin-editable)
+      2. Bundled compiled MJML template on disk
+    The plain_body is always built directly from context variables.
+    """
+    repo_name = run.job.repo_full_name
+    ctx = Context(
+        {
+            "repo_name": repo_name,
+            "summary": run.summary,
+            "run_status": run.status,
+            "suite_name": run.suite.name,
+            "pdf_attached": pdf_attached,
+            "site_url": settings.SITE_URL,
+        },
+        autoescape=False,
+    )
+
+    subject_tpl = run.suite.email_subject or _DEFAULT_SUBJECT
+    subject = Template(subject_tpl).render(ctx)
+
+    if run.suite.email_html_body:
+        html_body = Template(run.suite.email_html_body).render(ctx)
+    else:
+        raw = _BUNDLED_EMAIL_TEMPLATE.read_text(encoding="utf-8")
+        html_body = Template(raw).render(ctx)
+
+    plain_body = f"Your audit report for {repo_name} is ready."
+
+    return subject, plain_body, html_body
+
 
 def _send_report_email(run) -> None:
-    """Send PDF report to job.email. No-op if email is blank.
+    """Send the audit report email to job.email.  No-op if email is blank.
 
-    If the PDF exceeds _PDF_ATTACHMENT_SIZE_LIMIT, the email is sent without
-    an attachment and the recipient is asked to contact the administrator.
+    If the PDF exceeds _PDF_ATTACHMENT_SIZE_LIMIT the attachment is omitted and
+    the email body reflects that.
     """
     if not run.job.email:
         return
+
     from audit.pdf import render_pdf  # lazy import — requires system pango/gobject libs
+
     pdf_bytes = render_pdf(run)
-    if len(pdf_bytes) <= _PDF_ATTACHMENT_SIZE_LIMIT:
-        msg = EmailMessage(
-            subject=f"VibeAudit Report — {run.job.repo_full_name}",
-            body="Your audit report is attached.",
-            to=[run.job.email],
-        )
+    pdf_attached = len(pdf_bytes) <= _PDF_ATTACHMENT_SIZE_LIMIT
+
+    subject, plain_body, html_body = _render_email(run, pdf_attached=pdf_attached)
+
+    msg = EmailMultiAlternatives(subject=subject, body=plain_body, to=[run.job.email])
+    if settings.EMAIL_BACKEND != "django.core.mail.backends.console.EmailBackend":
+        msg.attach_alternative(html_body, "text/html")
+    if pdf_attached:
         msg.attach("report.pdf", pdf_bytes, "application/pdf")
-    else:
-        msg = EmailMessage(
-            subject=f"VibeAudit Report — {run.job.repo_full_name}",
-            body=(
-                "Your audit has completed.\n\n"
-                "The PDF report is too large to attach. "
-                "Please contact the administrator to download it."
-            ),
-            to=[run.job.email],
-        )
     msg.send()
 
 

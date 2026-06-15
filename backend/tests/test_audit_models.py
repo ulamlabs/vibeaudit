@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 import pytest
+from django.core.exceptions import ValidationError
 
 from audit.admin import AuditRunForm
 from audit.ai.suites import suite_to_agent_definitions
@@ -181,3 +182,57 @@ def test_suite_to_agent_definitions_only_enabled_in_order():
     )
     defs = suite_to_agent_definitions(suite)
     assert [d.id for d in defs] == ["a", "b"]
+
+
+# ---------------------------------------------------------------------------
+# AuditSuite.clean() — email template variable validation
+# ---------------------------------------------------------------------------
+
+def _suite(**kwargs):
+    """Build an unsaved AuditSuite with required fields."""
+    defaults = {"name": "Test", "model": "test-model"}
+    defaults.update(kwargs)
+    return AuditSuite(**defaults)
+
+
+@pytest.mark.django_db
+def test_email_template_blank_fields_valid():
+    suite = _suite(email_subject="", email_html_body="")
+    suite.full_clean()  # should not raise
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("field", ["email_subject", "email_html_body"])
+def test_email_template_supported_variables_valid(field):
+    template = (
+        "{{ repo_name }} {{ summary }} {{ run_status }} "
+        "{{ suite_name }} {{ pdf_attached }} {{ site_url }}"
+    )
+    suite = _suite(**{field: template})
+    suite.full_clean()  # should not raise
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("field", ["email_subject", "email_html_body"])
+def test_email_template_unknown_variable_raises(field):
+    suite = _suite(**{field: "Hello {{ unknown_var }}"})
+    with pytest.raises(ValidationError) as exc_info:
+        suite.full_clean()
+    assert field in exc_info.value.message_dict
+    assert "unknown_var" in str(exc_info.value)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("field", ["email_subject", "email_html_body"])
+def test_email_template_invalid_syntax_raises(field):
+    suite = _suite(**{field: "{% if %}"})  # missing condition
+    with pytest.raises(ValidationError) as exc_info:
+        suite.full_clean()
+    assert field in exc_info.value.message_dict
+
+
+@pytest.mark.django_db
+def test_email_template_only_repo_name_valid():
+    suite = _suite(email_html_body="Your report for {{ repo_name }} is ready.")
+    suite.full_clean()  # should not raise
+

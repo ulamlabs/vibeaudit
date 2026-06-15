@@ -10,6 +10,13 @@ from audit.tasks import execute_audit_run
 from github_app.models import Installation
 
 
+@pytest.fixture(autouse=True)
+def stub_send_report_email():
+    """Email sending is a side-effect tested separately; stub it out here."""
+    with patch("audit.tasks._send_report_email"):
+        yield
+
+
 @pytest.fixture
 def installation():
     return Installation.objects.create(

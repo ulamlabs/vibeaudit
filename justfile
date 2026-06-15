@@ -67,6 +67,12 @@ dc-shell:
 migrate:
     cd backend && uv run python manage.py migrate
 
+# Compile MJML email source to Django HTML template (run after editing src/report_email.mjml)
+compile-email:
+    npx mjml backend/audit/templates/email/src/report_email.mjml -o backend/audit/templates/email/report_email.html
+
+alias ce := compile-email
+
 # Run backend tests (pytest-style)
 test-be:
     cd backend && uv run --group dev python -m pytest

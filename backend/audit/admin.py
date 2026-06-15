@@ -90,6 +90,32 @@ class AuditSuiteAdmin(ModelAdmin):
     inlines = [AuditAgentInline]
     readonly_fields = ["effective_orchestrator_prompt"]
 
+    _EMAIL_HELP = (
+        "<strong>Available template variables:</strong> "
+        "<code>{{ repo_name }}</code> &mdash; full repository name, "
+        "<code>{{ summary }}</code> &mdash; run summary text, "
+        "<code>{{ run_status }}</code> &mdash; e.g. <em>completed</em> / <em>failed</em>, "
+        "<code>{{ suite_name }}</code> &mdash; suite name, "
+        "<code>{{ pdf_attached }}</code> &mdash; bool, "
+        "<code>{{ site_url }}</code> &mdash; site URL from settings."
+    )
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        if "email_html_body" in form.base_fields:
+            form.base_fields["email_html_body"].widget = forms.Textarea(
+                attrs={
+                    "rows": 30,
+                    "style": "font-family: monospace; font-size: 12px;",
+                }
+            )
+            form.base_fields["email_html_body"].help_text = mark_safe(self._EMAIL_HELP)
+        if "email_subject" in form.base_fields:
+            form.base_fields["email_subject"].help_text = mark_safe(
+                "Django template syntax. " + self._EMAIL_HELP
+            )
+        return form
+
     @admin.display(description="Agents")
     def agent_count(self, obj):
         return obj.agents.count()

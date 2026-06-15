@@ -1,0 +1,40 @@
+<mjml>
+  <mj-head>
+    <mj-title>VibeAudit Report</mj-title>
+    <mj-preview>Your AI code audit report for {{ repo_name }}</mj-preview>
+  </mj-head>
+
+  <mj-body>
+
+    <!-- Header -->
+    <mj-section>
+      <mj-column>
+        <mj-text align="center">
+          <strong>VibeAudit</strong> — AI-Powered Code Audit
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <!-- Main content -->
+    <mj-section>
+      <mj-column>
+
+        <mj-text>
+          Your audit report for <strong>{{ repo_name }}</strong> is ready.
+          The full report is attached as a PDF.
+        </mj-text>
+
+      </mj-column>
+    </mj-section>
+
+    <!-- Footer -->
+    <mj-section>
+      <mj-column>
+        <mj-text align="center" font-size="11px">
+          You're receiving this email because an audit was requested for <strong>{{ repo_name }}</strong>.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+  </mj-body>
+</mjml>
