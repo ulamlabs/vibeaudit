@@ -21,6 +21,7 @@ dependencies = [
     "pydantic>=2.13.4",
     "nh3>=0.3.5",
     "markdown-it-py>=4.2.0",
+    "weasyprint>=69.0",
 ]
 
 [dependency-groups]

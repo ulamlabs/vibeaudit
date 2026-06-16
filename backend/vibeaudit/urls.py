@@ -19,6 +19,7 @@ from django.contrib import admin
 from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 from django.http import Http404
 from django.template import TemplateDoesNotExist
+from django.template.loader import get_template
 from django.urls import include, path, re_path
 from django.views.generic import TemplateView
 
@@ -32,8 +33,6 @@ class SafeTemplateView(TemplateView):
     """
 
     def get(self, request, *args, **kwargs):
-        from django.template.loader import get_template
-
         template_name = self.get_template_names()[0]
         try:
             get_template(template_name)

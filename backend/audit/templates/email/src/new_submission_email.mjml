@@ -1,0 +1,44 @@
+<mjml>
+  <mj-head>
+    <mj-title>VibeAudit — New Submission</mj-title>
+    <mj-preview>New audit submission for {{ repo_name }}</mj-preview>
+  </mj-head>
+
+  <mj-body>
+
+    <mj-section>
+      <mj-column>
+        <mj-text font-weight="bold" font-size="20px">
+          New Audit Submission
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section>
+      <mj-column>
+        <mj-text>
+          A new audit has been submitted and is awaiting your approval.
+        </mj-text>
+        <mj-text>
+          <strong>Repository:</strong> {{ repo_name }}<br />
+          <strong>Submitted by:</strong> {{ submitter_email }}<br />
+          <strong>Job ID:</strong> {{ job_id }}
+        </mj-text>
+        <mj-raw>{% if site_url %}</mj-raw>
+        <mj-button href="{{ site_url }}/admin/audit/auditjob/{{ job_id }}/change/">
+          Review in Admin
+        </mj-button>
+        <mj-raw>{% endif %}</mj-raw>
+      </mj-column>
+    </mj-section>
+
+    <mj-section>
+      <mj-column>
+        <mj-text font-size="11px">
+          You received this email because you are a member of the <strong>audit_notifications</strong> group.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+  </mj-body>
+</mjml>

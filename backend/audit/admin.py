@@ -5,6 +5,7 @@ from django.conf import settings as django_settings
 from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group, User
+from django.http import HttpResponse
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.html import format_html
@@ -15,6 +16,7 @@ from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationFo
 
 from audit.ai.prompts import ORCHESTRATOR_SYSTEM_PROMPT
 from audit.models import AgentRunOutput, AuditAgent, AuditJob, AuditRun, AuditSuite
+from audit.pdf import render_pdf
 from audit.rendering import render_markdown_safe
 
 
@@ -89,6 +91,28 @@ class AuditSuiteAdmin(ModelAdmin):
     inlines = [AuditAgentInline]
     readonly_fields = ["effective_orchestrator_prompt"]
 
+    _EMAIL_HELP = (
+        "<strong>Available template variables:</strong> "
+        "<code>{{ repo_name }}</code> &mdash; full repository name, "
+        "<code>{{ summary }}</code> &mdash; run summary text, "
+        "<code>{{ run_status }}</code> &mdash; e.g. <em>completed</em> / <em>failed</em>, "
+        "<code>{{ suite_name }}</code> &mdash; suite name, "
+        "<code>{{ pdf_attached }}</code> &mdash; bool, "
+        "<code>{{ site_url }}</code> &mdash; site URL from settings."
+    )
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        if "email_html_body" in form.base_fields:
+            form.base_fields["email_html_body"].widget = forms.Textarea(
+                attrs={
+                    "rows": 30,
+                    "style": "font-family: monospace; font-size: 12px;",
+                }
+            )
+            form.base_fields["email_html_body"].help_text = mark_safe(self._EMAIL_HELP)
+        return form
+
     @admin.display(description="Agents")
     def agent_count(self, obj):
         return obj.agents.count()
@@ -157,7 +181,19 @@ class AuditRunAdmin(ModelAdmin):
         "finished_at",
         "celery_task_id",
     ]
-    actions_detail = ["terminate_run"]
+    actions_detail = ["terminate_run", "download_pdf"]
+
+    @action(description="Download PDF", url_path="download-pdf")
+    def download_pdf(self, request, object_id):
+        run = AuditRun.objects.get(pk=object_id)
+        try:
+            pdf_bytes = render_pdf(run)
+        except Exception as exc:
+            self.message_user(request, f"PDF generation failed: {exc}", messages.ERROR)
+            return redirect(reverse("admin:audit_auditrun_change", args=[object_id]))
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="report-{run.pk}.pdf"'
+        return response
 
     def get_fields(self, request, obj=None):
         if obj is None:

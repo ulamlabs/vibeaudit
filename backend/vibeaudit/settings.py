@@ -196,6 +196,16 @@ ANYMAIL = {
 }
 
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="webmaster@localhost")
+SITE_URL = env("SITE_URL", default="")
+
+# Optional directory that is checked *before* the bundled email templates.
+# Set to an absolute path to override individual templates without replacing all of them.
+_extra_email_templates_dir = env("EXTRA_EMAIL_TEMPLATES_DIR", default="")
+EXTRA_EMAIL_TEMPLATES_DIR = (
+    Path(_extra_email_templates_dir) if _extra_email_templates_dir else None
+)
+
+REPORT_EMAIL_SUBJECT = env("REPORT_EMAIL_SUBJECT", default="VibeAudit Report")
 
 
 UNFOLD = {
@@ -245,6 +255,10 @@ AUDIT_TASK_SOFT_TIME_LIMIT_SECONDS = env.int(
     "AUDIT_TASK_SOFT_TIME_LIMIT_SECONDS", default=600
 )
 AUDIT_TASK_TIME_LIMIT_SECONDS = env.int("AUDIT_TASK_TIME_LIMIT_SECONDS", default=660)
+
+# Path to a custom HTML report template for PDF generation.
+# Falls back to AuditSuite.report_template field or bundled default.
+REPORT_TEMPLATE_PATH = env("REPORT_TEMPLATE_PATH", default="")
 
 
 # Default primary key field type

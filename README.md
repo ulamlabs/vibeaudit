@@ -146,3 +146,33 @@ Frontend — pass `FRONTEND_SENTRY_DSN` at image build time (embedded as `VITE_S
 ```bash
 docker build --build-arg FRONTEND_SENTRY_DSN=https://<key>@o0.ingest.sentry.io/<project> -t ghcr.io/ulamlabs/vibeaudit:latest .
 ```
+
+## Email templates
+
+Three transactional templates live in `backend/audit/templates/email/`:
+
+| Template | Sent when |
+|---|---|
+| `report_email.html` | Audit completed — report delivered to submitter |
+| `failure_email.html` | Audit run failed — submitter notified with a reference ID |
+| `new_submission_email.html` | Job reaches `AWAITING_APPROVAL` — staff notified |
+
+Sources are MJML (`src/*.mjml`). After editing, recompile:
+
+```bash
+just compile-email   # alias: just ce
+```
+
+**Django template tags in MJML** — MJML strips bare `{% %}` tags during compilation. Wrap them in `<mj-raw>` so they survive into the compiled HTML:
+```xml
+<mj-raw>{% if site_url %}</mj-raw>
+<mj-button href="{{ site_url }}/...">...</mj-button>
+<mj-raw>{% endif %}</mj-raw>
+```
+
+**Overriding templates** — set `EXTRA_EMAIL_TEMPLATES_DIR` to an absolute path. Files found there take precedence over bundled ones; unmatched filenames fall back to bundled.
+
+**Staff notifications** — recipients must be `is_staff=True` **and** members of the `audit_notifications` group. The group is **not** created automatically — create it via Django admin, then add staff users to it. Without the group no notifications are sent, but the app works normally.
+
+**Report subject** — configurable via the `REPORT_EMAIL_SUBJECT` environment variable (default: `"VibeAudit Report"`).
+

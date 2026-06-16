@@ -5,6 +5,11 @@ from django.utils import timezone
 
 from audit.ai.runner import run_pipeline
 from audit.ai.suites import suite_to_agent_definitions
+from audit.email import (
+    send_failure_email,
+    send_new_submission_notification,
+    send_report_email,
+)
 from audit.models import AgentRunOutput, AuditJob, AuditRun
 from github_app.github import get_installation_token
 
@@ -26,6 +31,8 @@ def clone_repo(job_id: int) -> None:
     except Exception:
         job.transition_to(AuditJob.State.FAILED)
         raise
+
+    send_new_submission_notification(job)
 
 
 @shared_task
@@ -55,7 +62,6 @@ def execute_audit_run(self, run_id: int) -> None:
         run.save(update_fields=["status", "error", "finished_at"])
         return
 
-    # Store the Celery task ID for tracking/revocation (None if called directly in tests)
     run.status = AuditRun.Status.RUNNING
     run.started_at = timezone.now()
     run.save(update_fields=["status", "started_at"])
@@ -86,6 +92,10 @@ def execute_audit_run(self, run_id: int) -> None:
         run.error = str(exc)
         run.finished_at = timezone.now()
         run.save(update_fields=["status", "error", "finished_at"])
+        send_failure_email(run)
     finally:
         if not job.keep_sources:
             job.cleanup()
+
+    if run.status == AuditRun.Status.COMPLETED:
+        send_report_email(run)

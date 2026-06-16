@@ -10,6 +10,16 @@ from audit.tasks import execute_audit_run
 from github_app.models import Installation
 
 
+@pytest.fixture(autouse=True)
+def stub_email_sending():
+    """Email sending is a side-effect tested separately; stub it out here."""
+    with (
+        patch("audit.tasks.send_report_email"),
+        patch("audit.tasks.send_failure_email"),
+    ):
+        yield
+
+
 @pytest.fixture
 def installation():
     return Installation.objects.create(
@@ -103,6 +113,19 @@ def test_execute_audit_run_cleans_up_when_not_keeping_sources(installation, suit
     ):
         execute_audit_run(run.pk)
     cleanup.assert_called_once()
+
+
+@pytest.mark.django_db
+def test_report_email_failure_does_not_change_run_status(installation, suite):
+    job = _ready_job(installation)
+    run = AuditRun.objects.create(job=job, suite=suite)
+    with (
+        patch("audit.tasks.run_pipeline", return_value=_result()),
+        patch("audit.email._send", side_effect=Exception("smtp down")),
+    ):
+        execute_audit_run(run.pk)
+    run.refresh_from_db()
+    assert run.status == AuditRun.Status.COMPLETED
 
 
 @pytest.mark.django_db

@@ -2,7 +2,10 @@ import shutil
 from pathlib import Path
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models, transaction
+from django.template import Template, TemplateSyntaxError
+from django.template.base import VariableNode
 from django.utils import timezone
 
 
@@ -117,6 +120,22 @@ class AuditJob(models.Model):
         return f"AuditJob #{self.pk} ({self.repo_full_name} - {self.state})"
 
 
+# Variables available in email_html_body Django templates.
+# BACKWARD COMPATIBILITY: variables in this set must never be removed or renamed.
+# Existing custom templates stored in the database rely on them.
+# Adding new variables is always safe; removing or renaming is a breaking change.
+ALLOWED_EMAIL_TEMPLATE_VARS = frozenset(
+    {
+        "repo_name",  # job.repo_full_name
+        "summary",  # run.summary
+        "run_status",  # run.status  (e.g. 'completed' / 'failed')
+        "suite_name",  # suite.name
+        "pdf_attached",  # bool — True when PDF was successfully attached
+        "site_url",  # settings.SITE_URL or blank
+    }
+)
+
+
 class AuditSuite(models.Model):
     """A named, editable collection of specialist agents."""
 
@@ -129,9 +148,26 @@ class AuditSuite(models.Model):
         blank=True,
         help_text="Optional override of the orchestrator system prompt; blank uses the code default.",
     )
+    report_template = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "Custom HTML report template for PDF generation. "
+            "Leave blank to use the REPORT_TEMPLATE_PATH env var or the bundled default."
+        ),
+    )
     model = models.CharField(
         max_length=100,
         help_text="Model name (e.g. 'claude-opus-4-7'). Combined with AI_MODEL_PROVIDER at run time.",
+    )
+    email_html_body = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "Full HTML email body with Django template syntax. "
+            "Available vars: repo_name, summary, run_status, suite_name, pdf_attached, site_url. "
+            "Blank uses the compiled MJML template from source."
+        ),
     )
     task_soft_time_limit_seconds = models.PositiveIntegerField(
         null=True,
@@ -147,6 +183,34 @@ class AuditSuite(models.Model):
 
     class Meta:
         ordering = ["name"]
+
+    def clean(self):
+        if not self.email_html_body:
+            return
+        try:
+            tpl = Template(self.email_html_body)
+        except TemplateSyntaxError as exc:
+            raise ValidationError(
+                {"email_html_body": f"Invalid Django template syntax: {exc}"}
+            )
+        top_level_vars = set()
+        for node in tpl.nodelist.get_nodes_by_type(VariableNode):
+            try:
+                raw = node.filter_expression.var.var
+            except AttributeError:
+                continue
+            top_level_vars.add(raw.split(".")[0])
+        unknown = top_level_vars - ALLOWED_EMAIL_TEMPLATE_VARS
+        if unknown:
+            supported = ", ".join(sorted(ALLOWED_EMAIL_TEMPLATE_VARS))
+            raise ValidationError(
+                {
+                    "email_html_body": (
+                        f"Unsupported template variable(s): {', '.join(sorted(unknown))}. "
+                        f"Supported variables: {supported}."
+                    )
+                }
+            )
 
     def save(self, *args, **kwargs):
         update_fields = kwargs.get("update_fields")
