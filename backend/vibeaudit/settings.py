@@ -205,6 +205,8 @@ EXTRA_EMAIL_TEMPLATES_DIR = (
     Path(_extra_email_templates_dir) if _extra_email_templates_dir else None
 )
 
+REPORT_EMAIL_SUBJECT = env("REPORT_EMAIL_SUBJECT", default="VibeAudit Report")
+
 
 UNFOLD = {
     "SITE_TITLE": env("ADMIN_SITE_TITLE", default="VibeAudit"),

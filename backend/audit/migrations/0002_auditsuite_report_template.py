@@ -31,20 +31,6 @@ class Migration(migrations.Migration):
         ),
         migrations.AddField(
             model_name="auditsuite",
-            name="email_subject",
-            field=models.CharField(
-                blank=True,
-                default="",
-                max_length=500,
-                help_text=(
-                    "Django template syntax for the email subject line. "
-                    "Available vars: job, suite, run. "
-                    "Blank uses the built-in default."
-                ),
-            ),
-        ),
-        migrations.AddField(
-            model_name="auditsuite",
             name="email_html_body",
             field=models.TextField(
                 blank=True,

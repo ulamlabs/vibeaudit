@@ -17,7 +17,7 @@ _IS_CONSOLE_EMAIL = (
 
 _BUNDLED_EMAIL_DIR = settings.BASE_DIR / "audit" / "templates" / "email"
 
-_DEFAULT_REPORT_SUBJECT = "VibeAudit Report"
+_DEFAULT_REPORT_SUBJECT = settings.REPORT_EMAIL_SUBJECT
 _DEFAULT_FAILURE_SUBJECT = "VibeAudit Audit Failed"
 _DEFAULT_SUBMISSION_SUBJECT = "New VibeAudit Submission"
 
@@ -51,7 +51,7 @@ def render_report_email(run, pdf_attached: bool) -> tuple[str, str, str]:
         autoescape=False,
     )
 
-    subject = Template(run.suite.email_subject or _DEFAULT_REPORT_SUBJECT).render(ctx)
+    subject = _DEFAULT_REPORT_SUBJECT
 
     if run.suite.email_html_body:
         html_body = Template(run.suite.email_html_body).render(ctx)

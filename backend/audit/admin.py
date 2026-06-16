@@ -111,10 +111,6 @@ class AuditSuiteAdmin(ModelAdmin):
                 }
             )
             form.base_fields["email_html_body"].help_text = mark_safe(self._EMAIL_HELP)
-        if "email_subject" in form.base_fields:
-            form.base_fields["email_subject"].help_text = mark_safe(
-                "Django template syntax. " + self._EMAIL_HELP
-            )
         return form
 
     @admin.display(description="Agents")

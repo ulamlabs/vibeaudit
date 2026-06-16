@@ -120,7 +120,7 @@ class AuditJob(models.Model):
         return f"AuditJob #{self.pk} ({self.repo_full_name} - {self.state})"
 
 
-# Variables available in email_subject and email_html_body Django templates.
+# Variables available in email_html_body Django templates.
 # BACKWARD COMPATIBILITY: variables in this set must never be removed or renamed.
 # Existing custom templates stored in the database rely on them.
 # Adding new variables is always safe; removing or renaming is a breaking change.
@@ -160,16 +160,6 @@ class AuditSuite(models.Model):
         max_length=100,
         help_text="Model name (e.g. 'claude-opus-4-7'). Combined with AI_MODEL_PROVIDER at run time.",
     )
-    email_subject = models.CharField(
-        max_length=500,
-        blank=True,
-        default="",
-        help_text=(
-            "Django template syntax for the email subject line. "
-            "Available vars: job, suite, run. "
-            "Blank uses the built-in default."
-        ),
-    )
     email_html_body = models.TextField(
         blank=True,
         default="",
@@ -195,34 +185,32 @@ class AuditSuite(models.Model):
         ordering = ["name"]
 
     def clean(self):
-        errors = {}
-        for field_name in ("email_subject", "email_html_body"):
-            value = getattr(self, field_name)
-            if not value:
-                continue
+        if not self.email_html_body:
+            return
+        try:
+            tpl = Template(self.email_html_body)
+        except TemplateSyntaxError as exc:
+            raise ValidationError(
+                {"email_html_body": f"Invalid Django template syntax: {exc}"}
+            )
+        top_level_vars = set()
+        for node in tpl.nodelist.get_nodes_by_type(VariableNode):
             try:
-                tpl = Template(value)
-            except TemplateSyntaxError as exc:
-                errors[field_name] = ValidationError(
-                    f"Invalid Django template syntax: {exc}"
-                )
+                raw = node.filter_expression.var.var
+            except AttributeError:
                 continue
-            top_level_vars = set()
-            for node in tpl.nodelist.get_nodes_by_type(VariableNode):
-                try:
-                    raw = node.filter_expression.var.var
-                except AttributeError:
-                    continue
-                top_level_vars.add(raw.split(".")[0])
-            unknown = top_level_vars - ALLOWED_EMAIL_TEMPLATE_VARS
-            if unknown:
-                supported = ", ".join(sorted(ALLOWED_EMAIL_TEMPLATE_VARS))
-                errors[field_name] = ValidationError(
-                    f"Unsupported template variable(s): {', '.join(sorted(unknown))}. "
-                    f"Supported variables: {supported}."
-                )
-        if errors:
-            raise ValidationError(errors)
+            top_level_vars.add(raw.split(".")[0])
+        unknown = top_level_vars - ALLOWED_EMAIL_TEMPLATE_VARS
+        if unknown:
+            supported = ", ".join(sorted(ALLOWED_EMAIL_TEMPLATE_VARS))
+            raise ValidationError(
+                {
+                    "email_html_body": (
+                        f"Unsupported template variable(s): {', '.join(sorted(unknown))}. "
+                        f"Supported variables: {supported}."
+                    )
+                }
+            )
 
     def save(self, *args, **kwargs):
         update_fields = kwargs.get("update_fields")

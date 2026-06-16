@@ -198,12 +198,12 @@ def _suite(**kwargs):
 
 @pytest.mark.django_db
 def test_email_template_blank_fields_valid():
-    suite = _suite(email_subject="", email_html_body="")
+    suite = _suite(email_html_body="")
     suite.full_clean()  # should not raise
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize("field", ["email_subject", "email_html_body"])
+@pytest.mark.parametrize("field", ["email_html_body"])
 def test_email_template_supported_variables_valid(field):
     template = (
         "{{ repo_name }} {{ summary }} {{ run_status }} "
@@ -214,7 +214,7 @@ def test_email_template_supported_variables_valid(field):
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize("field", ["email_subject", "email_html_body"])
+@pytest.mark.parametrize("field", ["email_html_body"])
 def test_email_template_unknown_variable_raises(field):
     suite = _suite(**{field: "Hello {{ unknown_var }}"})
     with pytest.raises(ValidationError) as exc_info:
@@ -224,7 +224,7 @@ def test_email_template_unknown_variable_raises(field):
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize("field", ["email_subject", "email_html_body"])
+@pytest.mark.parametrize("field", ["email_html_body"])
 def test_email_template_invalid_syntax_raises(field):
     suite = _suite(**{field: "{% if %}"})  # missing condition
     with pytest.raises(ValidationError) as exc_info:
