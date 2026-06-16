@@ -24,11 +24,11 @@
           <strong>Submitted by:</strong> {{ submitter_email }}<br />
           <strong>Job ID:</strong> {{ job_id }}
         </mj-text>
-        {% if site_url %}
+        <mj-raw>{% if site_url %}</mj-raw>
         <mj-button href="{{ site_url }}/admin/audit/auditjob/{{ job_id }}/change/">
           Review in Admin
         </mj-button>
-        {% endif %}
+        <mj-raw>{% endif %}</mj-raw>
       </mj-column>
     </mj-section>
 

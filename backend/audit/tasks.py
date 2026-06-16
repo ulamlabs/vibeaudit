@@ -28,10 +28,11 @@ def clone_repo(job_id: int) -> None:
         git.Repo.clone_from(clone_url, job.clone_path)
 
         job.transition_to(AuditJob.State.AWAITING_APPROVAL)
-        send_new_submission_notification(job)
     except Exception:
         job.transition_to(AuditJob.State.FAILED)
         raise
+
+    send_new_submission_notification(job)
 
 
 @shared_task
@@ -86,8 +87,6 @@ def execute_audit_run(self, run_id: int) -> None:
                 for i, cap in enumerate(result.agent_outputs)
             ]
         )
-
-        send_report_email(run)
     except Exception as exc:  # noqa: BLE001
         run.status = AuditRun.Status.FAILED
         run.error = str(exc)
@@ -97,3 +96,6 @@ def execute_audit_run(self, run_id: int) -> None:
     finally:
         if not job.keep_sources:
             job.cleanup()
+
+    if run.status == AuditRun.Status.COMPLETED:
+        send_report_email(run)

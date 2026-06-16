@@ -165,7 +165,7 @@ class AuditSuite(models.Model):
         default="",
         help_text=(
             "Full HTML email body with Django template syntax. "
-            "Available vars: job, suite, run, pdf_attached, site_url. "
+            "Available vars: repo_name, summary, run_status, suite_name, pdf_attached, site_url. "
             "Blank uses the compiled MJML template from source."
         ),
     )

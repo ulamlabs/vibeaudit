@@ -47,8 +47,7 @@ def render_report_email(run, pdf_attached: bool) -> tuple[str, str, str]:
             "suite_name": run.suite.name,
             "pdf_attached": pdf_attached,
             "site_url": settings.SITE_URL,
-        },
-        autoescape=False,
+        }
     )
 
     subject = _DEFAULT_REPORT_SUBJECT
@@ -76,7 +75,10 @@ def send_report_email(run) -> None:
     msg = EmailMultiAlternatives(subject=subject, body=plain_body, to=[run.job.email])
     if pdf_attached:
         msg.attach("report.pdf", pdf_bytes, "application/pdf")
-    _send(msg, html_body)
+    try:
+        _send(msg, html_body)
+    except Exception:
+        logger.exception("Failed to send report email for run %s", run.pk)
 
 
 def send_failure_email(run) -> None:
@@ -86,8 +88,7 @@ def send_failure_email(run) -> None:
 
     repo_name = run.job.repo_full_name
     ctx = Context(
-        {"repo_name": repo_name, "run_id": run.pk, "site_url": settings.SITE_URL},
-        autoescape=False,
+        {"repo_name": repo_name, "run_id": run.pk, "site_url": settings.SITE_URL}
     )
     html_body = Template(_load_email_template("failure_email.html")).render(ctx)
     plain_body = (
@@ -127,8 +128,7 @@ def send_new_submission_notification(job) -> None:
             "submitter_email": job.email,
             "job_id": job.pk,
             "site_url": settings.SITE_URL,
-        },
-        autoescape=False,
+        }
     )
     html_body = Template(_load_email_template("new_submission_email.html")).render(ctx)
     plain_body = (

@@ -131,12 +131,11 @@
                       <td align="left" style="font-size:0px;padding:10px 25px;word-break:break-word;">
                         <div style="font-family:Ubuntu, Helvetica, Arial, sans-serif;font-size:13px;line-height:1;text-align:left;color:#000000;">Please contact the administrator and quote the reference ID above so we can investigate.</div>
                       </td>
-                    </tr>
-                    <tr>
+                    </tr> {% if site_url %} <tr>
                       <td align="left" style="font-size:0px;padding:10px 25px;word-break:break-word;">
                         <div style="font-family:Ubuntu, Helvetica, Arial, sans-serif;font-size:13px;line-height:1;text-align:left;color:#000000;">Visit <a href="{{ site_url }}">{{ site_url }}</a> to submit a new audit or check your status.</div>
                       </td>
-                    </tr>
+                    </tr> {% endif %}
                   </tbody>
                 </table>
               </div>

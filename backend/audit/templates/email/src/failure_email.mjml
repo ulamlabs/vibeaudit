@@ -26,11 +26,11 @@
         <mj-text>
           Please contact the administrator and quote the reference ID above so we can investigate.
         </mj-text>
-        {% if site_url %}
+        <mj-raw>{% if site_url %}</mj-raw>
         <mj-text>
           Visit <a href="{{ site_url }}">{{ site_url }}</a> to submit a new audit or check your status.
         </mj-text>
-        {% endif %}
+        <mj-raw>{% endif %}</mj-raw>
       </mj-column>
     </mj-section>
 

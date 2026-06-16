@@ -163,9 +163,16 @@ Sources are MJML (`src/*.mjml`). After editing, recompile:
 just compile-email   # alias: just ce
 ```
 
+**Django template tags in MJML** — MJML strips bare `{% %}` tags during compilation. Wrap them in `<mj-raw>` so they survive into the compiled HTML:
+```xml
+<mj-raw>{% if site_url %}</mj-raw>
+<mj-button href="{{ site_url }}/...">...</mj-button>
+<mj-raw>{% endif %}</mj-raw>
+```
+
 **Overriding templates** — set `EXTRA_EMAIL_TEMPLATES_DIR` to an absolute path. Files found there take precedence over bundled ones; unmatched filenames fall back to bundled.
 
 **Staff notifications** — recipients must be `is_staff=True` **and** members of the `audit_notifications` group (created automatically by migrations). Add users via Django admin.
 
-**Report subject** — configurable per-suite via `AuditSuite.email_subject` (Django template syntax, see admin).
+**Report subject** — configurable via the `REPORT_EMAIL_SUBJECT` environment variable (default: `"VibeAudit Report"`).
 
