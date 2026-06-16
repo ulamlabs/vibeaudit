@@ -3,16 +3,6 @@
 from django.db import migrations, models
 
 
-def create_audit_notifications_group(apps, schema_editor):
-    Group = apps.get_model("auth", "Group")
-    Group.objects.get_or_create(name="audit_notifications")
-
-
-def delete_audit_notifications_group(apps, schema_editor):
-    Group = apps.get_model("auth", "Group")
-    Group.objects.filter(name="audit_notifications").delete()
-
-
 class Migration(migrations.Migration):
     dependencies = [
         ("audit", "0001_initial"),
@@ -41,9 +31,5 @@ class Migration(migrations.Migration):
                     "Blank uses the compiled MJML template from source."
                 ),
             ),
-        ),
-        migrations.RunPython(
-            create_audit_notifications_group,
-            reverse_code=delete_audit_notifications_group,
         ),
     ]

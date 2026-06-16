@@ -172,7 +172,7 @@ just compile-email   # alias: just ce
 
 **Overriding templates** — set `EXTRA_EMAIL_TEMPLATES_DIR` to an absolute path. Files found there take precedence over bundled ones; unmatched filenames fall back to bundled.
 
-**Staff notifications** — recipients must be `is_staff=True` **and** members of the `audit_notifications` group (created automatically by migrations). Add users via Django admin.
+**Staff notifications** — recipients must be `is_staff=True` **and** members of the `audit_notifications` group. The group is **not** created automatically — create it via Django admin, then add staff users to it. Without the group no notifications are sent, but the app works normally.
 
 **Report subject** — configurable via the `REPORT_EMAIL_SUBJECT` environment variable (default: `"VibeAudit Report"`).
 
