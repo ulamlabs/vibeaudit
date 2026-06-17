@@ -122,7 +122,13 @@ def _extract_agent_outputs(messages: list[BaseMessage]) -> list[AgentOutputCaptu
 
 
 def _run_orchestrator(
-    repo_path: Path, agents, model_name: str, orchestrator_prompt: str | None = None
+    repo_path: Path,
+    agents,
+    model_name: str,
+    orchestrator_prompt: str | None = None,
+    *,
+    run_id: int | None = None,
+    repo_name: str | None = None,
 ):
     model = get_llm(model_name)
     system_prompt = orchestrator_prompt or ORCHESTRATOR_SYSTEM_PROMPT
@@ -133,8 +139,10 @@ def _run_orchestrator(
         subagents=_build_specialist_subagents(agents),
         response_format=SubmittedReport,
     )
+    label = f"run={run_id} repo={repo_name}" if run_id and repo_name else "audit"
     state = agent.invoke(
-        {"messages": [{"role": "user", "content": _build_orchestrator_prompt(agents)}]}
+        {"messages": [{"role": "user", "content": _build_orchestrator_prompt(agents)}]},
+        config={"run_name": label},
     )
 
     submitted = state.get("structured_response") if isinstance(state, dict) else None
@@ -149,12 +157,22 @@ def _run_orchestrator(
 
 
 def run_pipeline(
-    job, agents, model_name: str, orchestrator_prompt: str | None = None
+    job,
+    agents,
+    model_name: str,
+    orchestrator_prompt: str | None = None,
+    *,
+    run_id: int | None = None,
 ) -> PipelineResult:
     """Run the orchestrated audit over the cloned repo and return a PipelineResult."""
     repo_name = job.repo_full_name or Path(str(job.clone_path)).name
     submitted, agent_outputs = _run_orchestrator(
-        job.clone_path, agents, model_name, orchestrator_prompt
+        job.clone_path,
+        agents,
+        model_name,
+        orchestrator_prompt,
+        run_id=run_id,
+        repo_name=repo_name,
     )
     report = PipelineReport(
         job_id=str(job.pk),

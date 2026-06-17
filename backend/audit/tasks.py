@@ -69,7 +69,7 @@ def execute_audit_run(self, run_id: int) -> None:
     try:
         agents = suite_to_agent_definitions(suite)
         result = run_pipeline(
-            job, agents, suite.model, suite.orchestrator_prompt or None
+            job, agents, suite.model, suite.orchestrator_prompt or None, run_id=run_id
         )
         report = result.report
 
