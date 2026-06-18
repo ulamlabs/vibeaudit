@@ -1,3 +1,5 @@
+import shutil
+
 import git
 from celery import shared_task
 from django.conf import settings
@@ -25,7 +27,8 @@ def clone_repo(job_id: int) -> None:
         clone_url = f"https://x-access-token:{token}@github.com/{owner}/{repo}.git"
 
         job.clone_path.mkdir(parents=True, exist_ok=True)
-        git.Repo.clone_from(clone_url, job.clone_path)
+        git.Repo.clone_from(clone_url, job.clone_path, depth=1)
+        shutil.rmtree(job.clone_path / ".git")
 
         job.transition_to(AuditJob.State.AWAITING_APPROVAL)
     except Exception:
