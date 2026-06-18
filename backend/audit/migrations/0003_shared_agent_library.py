@@ -74,4 +74,19 @@ class Migration(migrations.Migration):
                 ),
             ),
         ),
+        # 9. Update orchestrator_prompt help_text to reflect its new role as the user prompt (no DB effect)
+        migrations.AlterField(
+            model_name="auditsuite",
+            name="orchestrator_prompt",
+            field=models.TextField(
+                blank=True,
+                help_text=(
+                    "Report/structure instructions given to the orchestrator as the user prompt — "
+                    "what to do with the findings and how to structure the report. "
+                    "Blank uses the built-in default. "
+                    "The hard requirements, subagent-calling mechanics, and output form are "
+                    "framework-owned and not editable here."
+                ),
+            ),
+        ),
     ]

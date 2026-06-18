@@ -14,7 +14,9 @@ from unfold.admin import ModelAdmin, TabularInline
 from unfold.decorators import action
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 
-from audit.ai.prompts import ORCHESTRATOR_SYSTEM_PROMPT
+from audit.ai.prompts import DEFAULT_REPORT_INSTRUCTIONS
+from audit.ai.runner import _build_orchestrator_system_prompt
+from audit.ai.suites import suite_to_agent_definitions
 from audit.models import AgentRunOutput, AuditAgent, AuditJob, AuditRun, AuditSuite
 from audit.pdf import render_pdf
 from audit.rendering import render_markdown_safe
@@ -118,14 +120,22 @@ class AuditSuiteAdmin(ModelAdmin):
     def agent_count(self, obj):
         return obj.agents.count()
 
-    @admin.display(description="Effective Orchestrator Prompt")
+    @admin.display(description="Orchestrator prompts (system + report instructions)")
     def effective_orchestrator_prompt(self, obj):
-        # Show the actual prompt that will be used (override or default).
-        prompt = obj.orchestrator_prompt or ORCHESTRATOR_SYSTEM_PROMPT
+        system = _build_orchestrator_system_prompt(suite_to_agent_definitions(obj))
+        report = obj.orchestrator_prompt or DEFAULT_REPORT_INSTRUCTIONS
+        pre = (
+            'style="white-space: pre-wrap; word-break: break-word; '
+            'font-size: 0.85em; max-height: 300px; overflow-y: auto"'
+        )
         return format_html(
-            '<pre style="white-space: pre-wrap; word-break: break-word; '
-            'font-size: 0.85em; max-height: 400px; overflow-y: auto">{}</pre>',
-            prompt,
+            "<strong>System prompt (framework-owned):</strong><br>"
+            "<pre {pre}>{system}</pre>"
+            "<strong>Report instructions (user prompt):</strong><br>"
+            "<pre {pre}>{report}</pre>",
+            pre=mark_safe(pre),
+            system=system,
+            report=report,
         )
 
 

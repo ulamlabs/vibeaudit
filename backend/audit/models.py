@@ -146,7 +146,13 @@ class AuditSuite(models.Model):
     )
     orchestrator_prompt = models.TextField(
         blank=True,
-        help_text="Optional override of the orchestrator system prompt; blank uses the code default.",
+        help_text=(
+            "Report/structure instructions given to the orchestrator as the user prompt — "
+            "what to do with the findings and how to structure the report. "
+            "Blank uses the built-in default. "
+            "The hard requirements, subagent-calling mechanics, and output form are "
+            "framework-owned and not editable here."
+        ),
     )
     report_template = models.TextField(
         blank=True,
