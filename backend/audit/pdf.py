@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import html
 from pathlib import Path
 
 from django.conf import settings
@@ -22,31 +21,12 @@ def _load_template_string(run) -> str | None:
     return None
 
 
-def _build_toc_html(toc_items: list[tuple[int, str, str]]) -> str:
-    if not toc_items:
-        return ""
-    items_html = "\n".join(
-        f'    <li class="toc-h{level}"><a href="#{html.escape(slug)}">{html.escape(text)}</a></li>'
-        for level, text, slug in toc_items
-    )
-    return (
-        '<nav class="toc">\n'
-        '  <h2 class="toc-title">Contents</h2>\n'
-        "  <ul>\n"
-        f"{items_html}\n"
-        "  </ul>\n"
-        "</nav>"
-    )
-
-
 def _render_html(run) -> str:
-    report_html, toc_items = render_markdown_to_html(run.markdown or "")
-    toc_html = _build_toc_html(toc_items)
+    report_html, toc = render_markdown_to_html(run.markdown or "")
     context = {
         "run": run,
         "report_html": mark_safe(report_html),
-        "toc": mark_safe(toc_html),
-        "toc_items": toc_items,
+        "toc": toc,
         "generated_at": timezone.now(),
     }
     template_source = _load_template_string(run)

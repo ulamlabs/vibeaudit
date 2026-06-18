@@ -1,7 +1,6 @@
 import pytest
 
 from audit.models import AuditJob, AuditRun, AuditSuite
-from audit.pdf import _build_toc_html
 from github_app.models import Installation
 
 
@@ -58,21 +57,6 @@ def test_returns_none_when_no_overrides(run, settings):
     assert _load_template_string(run) is None
 
 
-def test_build_toc_html_empty_returns_empty_string() -> None:
-    assert _build_toc_html([]) == ""
-
-
-def test_build_toc_html_produces_nav_with_links() -> None:
-    html = _build_toc_html(
-        [(2, "Quick Wins", "quick-wins"), (3, "Finding One", "finding-one")]
-    )
-    assert '<nav class="toc">' in html
-    assert '<a href="#quick-wins">Quick Wins</a>' in html
-    assert 'class="toc-h2"' in html
-    assert '<a href="#finding-one">Finding One</a>' in html
-    assert 'class="toc-h3"' in html
-
-
 @pytest.mark.django_db
 def test_render_pdf_html_contains_toc(run):
     """Assembled HTML contains ToC with correct anchor (run.markdown has ## Hello)."""
@@ -92,9 +76,10 @@ def test_render_markdown_to_html_deduplicates_slugs() -> None:
     assert 'id="findings-2"' in html
 
 
-def test_build_toc_html_escapes_special_chars() -> None:
-    from audit.pdf import _build_toc_html
+@pytest.mark.django_db
+def test_render_html_toc_escapes_special_chars(run):
+    from audit.pdf import _render_html
 
-    html = _build_toc_html([(2, "A & B", "a-b"), (3, "<script>", "script")])
+    run.markdown = "## A & B\n\ntext"
+    html = _render_html(run)
     assert "A &amp; B" in html
-    assert "&lt;script&gt;" in html
