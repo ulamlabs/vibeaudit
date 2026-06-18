@@ -22,6 +22,8 @@ dependencies = [
     "nh3>=0.3.5",
     "markdown-it-py>=4.2.0",
     "weasyprint>=69.0",
+    "beautifulsoup4>=4.15.0",
+    "python-slugify>=8.0.4",
 ]
 
 [dependency-groups]
