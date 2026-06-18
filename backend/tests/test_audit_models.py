@@ -18,14 +18,14 @@ def installation():
 
 @pytest.fixture
 def default_suite():
-    suite = AuditSuite.objects.create(name="Default", is_default=True)
-    AuditAgent.objects.create(
-        suite=suite,
-        agent_id="project_overview",
-        name="Project Overview",
+    suite = AuditSuite.objects.create(name="Default", is_default=True, model="m")
+    agent = AuditAgent.objects.create(
+        agent_id="test_agent",
+        name="Test Agent",
         description="Summarize the repo.",
         prompt="Summarize /workspace/.",
     )
+    suite.agents.add(agent)
     return suite
 
 
@@ -163,25 +163,34 @@ def test_audit_run_form_accepts_run_for_ready_job(installation, default_suite):
 
 
 @pytest.mark.django_db
-def test_suite_to_agent_definitions_only_enabled_in_order():
-    suite = AuditSuite.objects.create(name="S")
-    AuditAgent.objects.create(
-        suite=suite, agent_id="b", name="B", description="d", prompt="p", position=1
-    )
-    AuditAgent.objects.create(
-        suite=suite, agent_id="a", name="A", description="d", prompt="p", position=0
-    )
-    AuditAgent.objects.create(
-        suite=suite,
-        agent_id="off",
-        name="Off",
-        description="d",
-        prompt="p",
-        position=2,
-        enabled=False,
-    )
+def test_suite_to_agent_definitions_returns_attached_agents():
+    suite = AuditSuite.objects.create(name="S", model="m")
+    agent_a = AuditAgent.objects.create(agent_id="a", name="A", description="d", prompt="p")
+    agent_b = AuditAgent.objects.create(agent_id="b", name="B", description="d", prompt="p")
+    unattached = AuditAgent.objects.create(agent_id="off", name="Off", description="d", prompt="p")
+    suite.agents.add(agent_a, agent_b)
     defs = suite_to_agent_definitions(suite)
-    assert [d.id for d in defs] == ["a", "b"]
+    ids = {d.id for d in defs}
+    assert ids == {"a", "b"}
+    assert "off" not in ids
+
+
+@pytest.mark.django_db
+def test_agent_can_be_shared_across_suites():
+    agent = AuditAgent.objects.create(
+        agent_id="shared_agent",
+        name="Shared",
+        description="A shared specialist.",
+        prompt="Do the thing.",
+    )
+    suite_a = AuditSuite.objects.create(name="Suite A", model="m")
+    suite_b = AuditSuite.objects.create(name="Suite B", model="m")
+    suite_a.agents.add(agent)
+    suite_b.agents.add(agent)
+    assert suite_a.agents.count() == 1
+    assert suite_b.agents.count() == 1
+    # both suites point to the same single object — no duplication
+    assert suite_a.agents.first().pk == suite_b.agents.first().pk
 
 
 # ---------------------------------------------------------------------------

@@ -57,14 +57,15 @@ class AuditRunForm(forms.ModelForm):
         return cleaned
 
 
-class AuditAgentInline(TabularInline):
-    model = AuditAgent
-    extra = 0
-    # position field is hidden but drives drag-sort; put a visible field first so drag handle works
-    fields = ["agent_id", "name", "description", "prompt", "enabled", "position"]
-    ordering = ["position", "id"]
-    ordering_field = "position"
-    hide_ordering_field = True
+@admin.register(AuditAgent)
+class AuditAgentAdmin(ModelAdmin):
+    list_display = ["agent_id", "name", "suite_list"]
+    search_fields = ["agent_id", "name", "description"]
+
+    @admin.display(description="Used by suites")
+    def suite_list(self, obj):
+        names = obj.suites.values_list("name", flat=True)
+        return ", ".join(names) if names else "—"
 
 
 class AuditSuiteAdminForm(forms.ModelForm):
@@ -88,7 +89,7 @@ class AuditSuiteAdmin(ModelAdmin):
     list_display = ["name", "model", "is_default", "agent_count", "created_at"]
     list_filter = ["is_default"]
     search_fields = ["name", "description"]
-    inlines = [AuditAgentInline]
+    filter_horizontal = ("agents",)
     readonly_fields = ["effective_orchestrator_prompt"]
 
     _EMAIL_HELP = (
@@ -126,22 +127,6 @@ class AuditSuiteAdmin(ModelAdmin):
             'font-size: 0.85em; max-height: 400px; overflow-y: auto">{}</pre>',
             prompt,
         )
-
-    def save_formset(self, request, form, formset, change):
-        if formset.model is AuditAgent:
-            # New rows get next position; existing rows keep their (drag-set) position
-            agent_forms = [
-                f
-                for f in formset.forms
-                if f.cleaned_data and not f.cleaned_data.get("DELETE")
-            ]
-            existing = [f.instance.position for f in agent_forms if f.instance.pk]
-            next_position = max(existing) + 1 if existing else 0
-            for f in agent_forms:
-                if f.instance.pk is None:
-                    f.instance.position = next_position
-                    next_position += 1
-        super().save_formset(request, form, formset, change)
 
 
 class AgentRunOutputInline(TabularInline):

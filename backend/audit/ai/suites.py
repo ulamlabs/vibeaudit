@@ -8,5 +8,5 @@ def suite_to_agent_definitions(suite) -> list[AgentDefinition]:
         AgentDefinition(
             id=a.agent_id, name=a.name, description=a.description, prompt=a.prompt
         )
-        for a in suite.agents.filter(enabled=True)
+        for a in suite.agents.all()
     ]
