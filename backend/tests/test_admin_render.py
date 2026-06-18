@@ -34,5 +34,3 @@ def test_rendered_output_sanitizes_and_renders():
     html = inline.rendered_output(_Obj(output="**bold** <script>alert(1)</script>"))
     assert "<strong>bold</strong>" in html
     assert "<script>" not in html
-
-

@@ -165,9 +165,13 @@ def test_audit_run_form_accepts_run_for_ready_job(installation, default_suite):
 @pytest.mark.django_db
 def test_suite_to_agent_definitions_returns_attached_agents():
     suite = AuditSuite.objects.create(name="S", model="m")
-    agent_a = AuditAgent.objects.create(agent_id="a", name="A", description="d", prompt="p")
-    agent_b = AuditAgent.objects.create(agent_id="b", name="B", description="d", prompt="p")
-    unattached = AuditAgent.objects.create(agent_id="off", name="Off", description="d", prompt="p")
+    agent_a = AuditAgent.objects.create(
+        agent_id="a", name="A", description="d", prompt="p"
+    )
+    agent_b = AuditAgent.objects.create(
+        agent_id="b", name="B", description="d", prompt="p"
+    )
+    AuditAgent.objects.create(agent_id="off", name="Off", description="d", prompt="p")
     suite.agents.add(agent_a, agent_b)
     defs = suite_to_agent_definitions(suite)
     ids = {d.id for d in defs}

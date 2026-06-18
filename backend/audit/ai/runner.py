@@ -140,7 +140,14 @@ def _run_orchestrator(
     )
     label = f"run={run_id} repo={repo_name}" if run_id and repo_name else "audit"
     state = agent.invoke(
-        {"messages": [{"role": "user", "content": orchestrator_prompt or DEFAULT_REPORT_INSTRUCTIONS}]},
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": orchestrator_prompt or DEFAULT_REPORT_INSTRUCTIONS,
+                }
+            ]
+        },
         config={"run_name": label},
     )
 

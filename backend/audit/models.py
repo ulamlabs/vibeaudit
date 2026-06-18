@@ -256,7 +256,9 @@ class AuditAgent(models.Model):
     """A specialist agent in the shared library (used by one or more suites)."""
 
     agent_id = models.SlugField(
-        max_length=80, unique=True, help_text="Subagent identifier passed to the orchestrator."
+        max_length=80,
+        unique=True,
+        help_text="Subagent identifier passed to the orchestrator.",
     )
     name = models.CharField(max_length=120)
     description = models.TextField(help_text="Delegation blurb the orchestrator sees.")

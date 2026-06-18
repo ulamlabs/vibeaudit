@@ -63,7 +63,9 @@ def test_build_toc_html_empty_returns_empty_string() -> None:
 
 
 def test_build_toc_html_produces_nav_with_links() -> None:
-    html = _build_toc_html([(2, "Quick Wins", "quick-wins"), (3, "Finding One", "finding-one")])
+    html = _build_toc_html(
+        [(2, "Quick Wins", "quick-wins"), (3, "Finding One", "finding-one")]
+    )
     assert '<nav class="toc">' in html
     assert '<a href="#quick-wins">Quick Wins</a>' in html
     assert 'class="toc-h2"' in html
@@ -83,6 +85,7 @@ def test_render_pdf_html_contains_toc(run):
 
 def test_render_markdown_to_html_deduplicates_slugs() -> None:
     from audit.rendering import render_markdown_to_html
+
     html, items = render_markdown_to_html("## Findings\n\n## Findings\n\ntext")
     slugs = [slug for _, _, slug in items]
     assert slugs == ["findings", "findings-2"]
@@ -91,6 +94,7 @@ def test_render_markdown_to_html_deduplicates_slugs() -> None:
 
 def test_build_toc_html_escapes_special_chars() -> None:
     from audit.pdf import _build_toc_html
+
     html = _build_toc_html([(2, "A & B", "a-b"), (3, "<script>", "script")])
     assert "A &amp; B" in html
     assert "&lt;script&gt;" in html

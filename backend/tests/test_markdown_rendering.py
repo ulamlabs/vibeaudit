@@ -24,7 +24,9 @@ def test_empty_input_returns_empty_string() -> None:
 
 
 def test_render_markdown_to_html_adds_heading_ids() -> None:
-    html, items = render_markdown_to_html("## Hello World\n\ntext\n\n### A Finding\n\nmore")
+    html, items = render_markdown_to_html(
+        "## Hello World\n\ntext\n\n### A Finding\n\nmore"
+    )
     assert 'id="hello-world"' in html
     assert 'id="a-finding"' in html
 
