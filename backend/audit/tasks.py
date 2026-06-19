@@ -34,7 +34,9 @@ def clone_repo(job_id: int) -> None:
         try:
             shutil.rmtree(job.clone_path / ".git")
         except Exception:
-            logger.warning("Failed to remove .git dir for job %s", job_id, exc_info=True)
+            logger.warning(
+                "Failed to remove .git dir for job %s", job_id, exc_info=True
+            )
 
         job.transition_to(AuditJob.State.AWAITING_APPROVAL)
     except Exception:

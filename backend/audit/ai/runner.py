@@ -11,6 +11,7 @@ from deepagents import (
 )
 from deepagents.backends import CompositeBackend, FilesystemBackend, StateBackend
 
+from langchain.agents.structured_output import ToolStrategy
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 
 from audit.ai.model import get_llm
@@ -136,7 +137,7 @@ def _run_orchestrator(
         system_prompt=_build_orchestrator_system_prompt(agents),
         backend=_make_backend(repo_path),
         subagents=_build_specialist_subagents(agents),
-        response_format=SubmittedReport,
+        response_format=ToolStrategy(schema=SubmittedReport),
     )
     label = f"run={run_id} repo={repo_name}" if run_id and repo_name else "audit"
     state = agent.invoke(
