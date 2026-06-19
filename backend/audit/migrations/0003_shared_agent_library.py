@@ -8,6 +8,25 @@ def attach_agents_to_suites(apps, schema_editor):
         agent.suite.agents_new.add(agent)
 
 
+def deduplicate_agent_ids(apps, schema_editor):
+    """Rename agents sharing an agent_id before the unique constraint is applied.
+
+    Under the old schema the same agent_id could exist once per suite. After the
+    FK is removed each row stands alone; duplicates are disambiguated by appending
+    their pk (e.g. "security-review" → "security-review-42") so no data is lost.
+    The first occurrence (lowest pk) keeps the original id.
+    """
+    AuditAgent = apps.get_model("audit", "AuditAgent")
+    seen: set = set()
+    for agent in AuditAgent.objects.order_by("pk"):
+        if agent.agent_id not in seen:
+            seen.add(agent.agent_id)
+        else:
+            agent.agent_id = f"{agent.agent_id}-{agent.pk}"
+            agent.save(update_fields=["agent_id"])
+            seen.add(agent.agent_id)
+
+
 def noop(apps, schema_editor):
     pass
 
@@ -39,6 +58,8 @@ class Migration(migrations.Migration):
         migrations.RemoveField(model_name="auditagent", name="suite"),
         migrations.RemoveField(model_name="auditagent", name="position"),
         migrations.RemoveField(model_name="auditagent", name="enabled"),
+        # 4b. Collapse duplicate agent_ids (same id in multiple suites was valid before)
+        migrations.RunPython(deduplicate_agent_ids, reverse_code=noop),
         # 5. Make agent_id globally unique
         migrations.AlterField(
             model_name="auditagent",

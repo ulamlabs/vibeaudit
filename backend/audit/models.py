@@ -186,7 +186,7 @@ class AuditSuite(models.Model):
         help_text="Optional Celery hard time limit override in seconds for runs started with this suite.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
-    agents: models.ManyToManyField = models.ManyToManyField(
+    agents: models.ManyToManyField["AuditAgent", "AuditAgent"] = models.ManyToManyField(
         "AuditAgent",
         blank=True,
         related_name="suites",

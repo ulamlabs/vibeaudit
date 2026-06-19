@@ -15,7 +15,7 @@ Templates are standard Django HTML templates rendered to PDF by **WeasyPrint**. 
 | `run` | `AuditRun` | The run object (see attributes below). |
 | `report_html` | `SafeString` | Audit body as rendered HTML. Output with `{{ report_html }}` — already marked safe. |
 | `toc` | `list[tuple[int, str, str]]` | ToC data: `(level, heading_text, slug)`. Level is 1–4. Iterate with `{% for level, text, slug in toc %}`. |
-| `generated_at` | `datetime` | UTC timestamp. Use with `{{ generated_at\|date:"Y-m-d H:i" }}`. |
+| `generated_at` | `datetime` | UTC timestamp. Use with `{{ generated_at|date:"Y-m-d H:i" }}`. |
 
 #### Useful `run` attributes
 
