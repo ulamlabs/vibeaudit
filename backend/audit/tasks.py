@@ -1,3 +1,6 @@
+import logging
+import shutil
+
 import git
 from celery import shared_task
 from django.conf import settings
@@ -13,6 +16,8 @@ from audit.email import (
 from audit.models import AgentRunOutput, AuditJob, AuditRun
 from github_app.github import get_installation_token
 
+logger = logging.getLogger(__name__)
+
 
 @shared_task
 def clone_repo(job_id: int) -> None:
@@ -25,7 +30,11 @@ def clone_repo(job_id: int) -> None:
         clone_url = f"https://x-access-token:{token}@github.com/{owner}/{repo}.git"
 
         job.clone_path.mkdir(parents=True, exist_ok=True)
-        git.Repo.clone_from(clone_url, job.clone_path)
+        git.Repo.clone_from(clone_url, job.clone_path, depth=1)
+        try:
+            shutil.rmtree(job.clone_path / ".git")
+        except Exception:
+            logger.warning("Failed to remove .git dir for job %s", job_id, exc_info=True)
 
         job.transition_to(AuditJob.State.AWAITING_APPROVAL)
     except Exception:

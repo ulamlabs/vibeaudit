@@ -21,7 +21,7 @@ def run(db, suite):
         job=job,
         suite=suite,
         status=AuditRun.Status.COMPLETED,
-        markdown="## Hello\n\nTest.",
+        markdown="## Hello World\n\nTest.",
         summary="summary",
     )
 
@@ -55,3 +55,31 @@ def test_returns_none_when_no_overrides(run, settings):
 
     settings.REPORT_TEMPLATE_PATH = ""
     assert _load_template_string(run) is None
+
+
+@pytest.mark.django_db
+def test_render_pdf_html_contains_toc(run):
+    """Assembled HTML contains ToC with correct anchor (run.markdown has ## Hello)."""
+    from audit.pdf import _render_html
+
+    html = _render_html(run)
+    assert 'class="toc"' in html
+    assert 'href="#hello-world"' in html
+
+
+def test_render_markdown_to_html_deduplicates_slugs() -> None:
+    from audit.rendering import render_markdown_to_html
+
+    html, items = render_markdown_to_html("## Findings\n\n## Findings\n\ntext")
+    slugs = [slug for _, _, slug in items]
+    assert slugs == ["findings", "findings-2"]
+    assert 'id="findings-2"' in html
+
+
+@pytest.mark.django_db
+def test_render_html_toc_escapes_special_chars(run):
+    from audit.pdf import _render_html
+
+    run.markdown = "## A & B\n\ntext"
+    html = _render_html(run)
+    assert "A &amp; B" in html

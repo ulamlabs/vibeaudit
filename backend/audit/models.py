@@ -146,7 +146,13 @@ class AuditSuite(models.Model):
     )
     orchestrator_prompt = models.TextField(
         blank=True,
-        help_text="Optional override of the orchestrator system prompt; blank uses the code default.",
+        help_text=(
+            "Report/structure instructions given to the orchestrator as the user prompt — "
+            "what to do with the findings and how to structure the report. "
+            "Blank uses the built-in default. "
+            "The hard requirements, subagent-calling mechanics, and output form are "
+            "framework-owned and not editable here."
+        ),
     )
     report_template = models.TextField(
         blank=True,
@@ -180,6 +186,11 @@ class AuditSuite(models.Model):
         help_text="Optional Celery hard time limit override in seconds for runs started with this suite.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    agents: models.ManyToManyField["AuditAgent", "AuditAgent"] = models.ManyToManyField(
+        "AuditAgent",
+        blank=True,
+        related_name="suites",
+    )
 
     class Meta:
         ordering = ["name"]
@@ -242,26 +253,22 @@ class AuditSuite(models.Model):
 
 
 class AuditAgent(models.Model):
-    """A specialist agent owned by a suite (mirrors ai.agents.AgentDefinition)."""
+    """A specialist agent in the shared library (used by one or more suites)."""
 
-    suite = models.ForeignKey(
-        AuditSuite, related_name="agents", on_delete=models.CASCADE
-    )
     agent_id = models.SlugField(
-        max_length=80, help_text="Subagent identifier passed to the orchestrator."
+        max_length=80,
+        unique=True,
+        help_text="Subagent identifier passed to the orchestrator.",
     )
     name = models.CharField(max_length=120)
     description = models.TextField(help_text="Delegation blurb the orchestrator sees.")
     prompt = models.TextField(help_text="Specialist focus instructions.")
-    position = models.PositiveIntegerField(default=0)
-    enabled = models.BooleanField(default=True)
 
     class Meta:
-        unique_together = [("suite", "agent_id")]
-        ordering = ["position", "id"]
+        ordering = ["agent_id"]
 
     def __str__(self):
-        return f"suite {self.suite_id} / {self.agent_id}"
+        return self.name
 
 
 class AuditRun(models.Model):

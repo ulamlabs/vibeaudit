@@ -147,6 +147,10 @@ Frontend — pass `FRONTEND_SENTRY_DSN` at image build time (embedded as `VITE_S
 docker build --build-arg FRONTEND_SENTRY_DSN=https://<key>@o0.ingest.sentry.io/<project> -t ghcr.io/ulamlabs/vibeaudit:latest .
 ```
 
+## Customising templates
+
+PDF report and email templates can be overridden per suite or via env vars. [TEMPLATING.md](TEMPLATING.md) is the authoritative reference — it is intentionally structured for use as LLM context when generating or editing templates. It covers available template variables, MJML/Django syntax rules, and WeasyPrint CSS patterns.
+
 ## Email templates
 
 Three transactional templates live in `backend/audit/templates/email/`:

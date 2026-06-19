@@ -14,7 +14,9 @@ from unfold.admin import ModelAdmin, TabularInline
 from unfold.decorators import action
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 
-from audit.ai.prompts import ORCHESTRATOR_SYSTEM_PROMPT
+from audit.ai.prompts import DEFAULT_REPORT_INSTRUCTIONS
+from audit.ai.runner import _build_orchestrator_system_prompt
+from audit.ai.suites import suite_to_agent_definitions
 from audit.models import AgentRunOutput, AuditAgent, AuditJob, AuditRun, AuditSuite
 from audit.pdf import render_pdf
 from audit.rendering import render_markdown_safe
@@ -57,14 +59,15 @@ class AuditRunForm(forms.ModelForm):
         return cleaned
 
 
-class AuditAgentInline(TabularInline):
-    model = AuditAgent
-    extra = 0
-    # position field is hidden but drives drag-sort; put a visible field first so drag handle works
-    fields = ["agent_id", "name", "description", "prompt", "enabled", "position"]
-    ordering = ["position", "id"]
-    ordering_field = "position"
-    hide_ordering_field = True
+@admin.register(AuditAgent)
+class AuditAgentAdmin(ModelAdmin):
+    list_display = ["agent_id", "name", "suite_list"]
+    search_fields = ["agent_id", "name", "description"]
+
+    @admin.display(description="Used by suites")
+    def suite_list(self, obj):
+        names = obj.suites.values_list("name", flat=True)
+        return ", ".join(names) if names else "—"
 
 
 class AuditSuiteAdminForm(forms.ModelForm):
@@ -88,7 +91,7 @@ class AuditSuiteAdmin(ModelAdmin):
     list_display = ["name", "model", "is_default", "agent_count", "created_at"]
     list_filter = ["is_default"]
     search_fields = ["name", "description"]
-    inlines = [AuditAgentInline]
+    filter_horizontal = ("agents",)
     readonly_fields = ["effective_orchestrator_prompt"]
 
     _EMAIL_HELP = (
@@ -117,31 +120,23 @@ class AuditSuiteAdmin(ModelAdmin):
     def agent_count(self, obj):
         return obj.agents.count()
 
-    @admin.display(description="Effective Orchestrator Prompt")
+    @admin.display(description="Orchestrator prompts (system + report instructions)")
     def effective_orchestrator_prompt(self, obj):
-        # Show the actual prompt that will be used (override or default).
-        prompt = obj.orchestrator_prompt or ORCHESTRATOR_SYSTEM_PROMPT
-        return format_html(
-            '<pre style="white-space: pre-wrap; word-break: break-word; '
-            'font-size: 0.85em; max-height: 400px; overflow-y: auto">{}</pre>',
-            prompt,
+        system = _build_orchestrator_system_prompt(suite_to_agent_definitions(obj))
+        report = obj.orchestrator_prompt or DEFAULT_REPORT_INSTRUCTIONS
+        pre = (
+            'style="white-space: pre-wrap; word-break: break-word; '
+            'font-size: 0.85em; max-height: 300px; overflow-y: auto"'
         )
-
-    def save_formset(self, request, form, formset, change):
-        if formset.model is AuditAgent:
-            # New rows get next position; existing rows keep their (drag-set) position
-            agent_forms = [
-                f
-                for f in formset.forms
-                if f.cleaned_data and not f.cleaned_data.get("DELETE")
-            ]
-            existing = [f.instance.position for f in agent_forms if f.instance.pk]
-            next_position = max(existing) + 1 if existing else 0
-            for f in agent_forms:
-                if f.instance.pk is None:
-                    f.instance.position = next_position
-                    next_position += 1
-        super().save_formset(request, form, formset, change)
+        return format_html(
+            "<strong>System prompt (framework-owned):</strong><br>"
+            "<pre {pre}>{system}</pre>"
+            "<strong>Report instructions (user prompt):</strong><br>"
+            "<pre {pre}>{report}</pre>",
+            pre=mark_safe(pre),
+            system=system,
+            report=report,
+        )
 
 
 class AgentRunOutputInline(TabularInline):

@@ -16,8 +16,8 @@ from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from audit.ai.model import get_llm
 from audit.ai.output import PipelineReport, SubmittedReport
 from audit.ai.prompts import (
+    DEFAULT_REPORT_INSTRUCTIONS,
     ORCHESTRATOR_SYSTEM_PROMPT,
-    ORCHESTRATOR_TASK_INSTRUCTIONS,
     SPECIALIST_SYSTEM_PROMPT_PREFIX,
 )
 
@@ -78,9 +78,9 @@ def _build_specialist_subagents(agents) -> list[SubAgent]:
     return subagents
 
 
-def _build_orchestrator_prompt(agents) -> str:
+def _build_orchestrator_system_prompt(agents) -> str:
     subagent_list = "\n".join(f"- {a.id}: {a.description}" for a in agents)
-    return f"{ORCHESTRATOR_TASK_INSTRUCTIONS}{subagent_list}"
+    return f"{ORCHESTRATOR_SYSTEM_PROMPT}{subagent_list}"
 
 
 def _message_text(content) -> str:
@@ -131,17 +131,23 @@ def _run_orchestrator(
     repo_name: str | None = None,
 ):
     model = get_llm(model_name)
-    system_prompt = orchestrator_prompt or ORCHESTRATOR_SYSTEM_PROMPT
     agent = create_deep_agent(
         model=model,
-        system_prompt=system_prompt,
+        system_prompt=_build_orchestrator_system_prompt(agents),
         backend=_make_backend(repo_path),
         subagents=_build_specialist_subagents(agents),
         response_format=SubmittedReport,
     )
     label = f"run={run_id} repo={repo_name}" if run_id and repo_name else "audit"
     state = agent.invoke(
-        {"messages": [{"role": "user", "content": _build_orchestrator_prompt(agents)}]},
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": orchestrator_prompt or DEFAULT_REPORT_INSTRUCTIONS,
+                }
+            ]
+        },
         config={"run_name": label},
     )
 
