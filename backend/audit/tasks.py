@@ -40,8 +40,19 @@ def clone_repo(job_id: int) -> None:
 
         job.transition_to(AuditJob.State.AWAITING_APPROVAL)
     except Exception:
+        # Keep the installation live on failure so the visitor can retry (and an
+        # admin could re-clone later); only a successful clone uninstalls.
         job.transition_to(AuditJob.State.FAILED)
         raise
+
+    # Clone is on disk — drop read-only GitHub access. Even with keep_sources,
+    # re-runs reuse the local clone, so we never need GitHub again. Best-effort
+    # so a failed uninstall never fails the audit; logger.exception so Sentry
+    # reports it.
+    try:
+        job.installation.uninstall()
+    except Exception:
+        logger.exception("Failed to uninstall installation for job %s", job_id)
 
     send_new_submission_notification(job)
 

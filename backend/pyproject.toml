@@ -10,6 +10,7 @@ dependencies = [
     "django-environ>=0.13.0",
     "django-unfold>=0.67.0",
     "djangorestframework>=3.16.1",
+    "django-cors-headers>=4.4.0",
     "whitenoise>=6.11.0",
     "gunicorn>=22.0.0",
     "sentry-sdk[django]>=2.0.0",

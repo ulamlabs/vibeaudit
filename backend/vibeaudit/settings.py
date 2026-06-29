@@ -57,12 +57,14 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "anymail",
     "rest_framework",
+    "corsheaders",
     "github_app",
     "audit",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -265,3 +267,23 @@ REPORT_TEMPLATE_PATH = env("REPORT_TEMPLATE_PATH", default="")
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# --- Cross-origin funnel (ulam.io) -----------------------------------------
+# ulam.io and vibeaudit.ulam.io are same-site (shared registrable domain), so
+# the session cookie stays host-only with SameSite=Lax and rides credentialed
+# cross-origin fetches. SECURITY: this — together with the CORS allowlist — is
+# the CSRF defense (see audit/authentication.py). If vibeaudit ever moves off
+# *.ulam.io, the cookie needs SameSite=None and CSRF protection must return.
+SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SAMESITE = "Lax"
+SESSION_COOKIE_SECURE = env.bool("SESSION_COOKIE_SECURE", default=True)
+CSRF_COOKIE_SECURE = env.bool("CSRF_COOKIE_SECURE", default=True)
+
+# CORS — concrete origins are supplied per-environment by vibeaudit-infra.
+CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
+CORS_ALLOW_CREDENTIALS = True
+
+# Allowlisted origins the GitHub install flow may redirect back to (open-redirect
+# boundary for the `return_to` carried in the install `state`).
+AUDIT_ALLOWED_RETURN_ORIGINS = env.list("AUDIT_ALLOWED_RETURN_ORIGINS", default=[])
+AUDIT_ENFORCE_CSRF = env.bool("AUDIT_ENFORCE_CSRF", default=False)

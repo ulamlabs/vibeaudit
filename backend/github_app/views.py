@@ -3,6 +3,7 @@ GitHub App OAuth views.
 """
 
 import secrets
+from urllib.parse import quote
 
 from django.conf import settings
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
@@ -21,6 +22,7 @@ from github_app.github import (
     list_repos,
 )
 from github_app.models import Installation
+from github_app.return_to import build_state, parse_state, is_allowed_return_to
 from github_app.serializers import InstallationSerializer, RepoSerializer
 
 
@@ -29,18 +31,23 @@ from github_app.serializers import InstallationSerializer, RepoSerializer
 def connect(request: HttpRequest) -> HttpResponse:
     """
     Initiate GitHub App installation flow.
-    Generates a CSRF state token and redirects to GitHub's installation page.
+    Generates a one-time nonce (stored in session) and an install `state` that
+    also carries an optional, allowlisted `return_to` for the post-install
+    redirect. Redirects to GitHub's installation page.
     """
-    state = secrets.token_urlsafe(32)
-    request.session["github_oauth_state"] = state
-
-    # Force session persistence before redirect so callback can read state deterministically.
+    nonce = secrets.token_urlsafe(32)
+    request.session["github_oauth_state"] = nonce
+    # Force session persistence before redirect so callback can read nonce.
     request.session.save()
 
+    return_to = request.GET.get("return_to")
+    if not is_allowed_return_to(return_to, settings.AUDIT_ALLOWED_RETURN_ORIGINS):
+        return_to = None
+
+    state = build_state(nonce, return_to)
+
     github_app_slug = settings.GITHUB_APP_SLUG
-    github_install_url = (
-        f"https://github.com/apps/{github_app_slug}/installations/new?state={state}"
-    )
+    github_install_url = f"https://github.com/apps/{github_app_slug}/installations/new?state={quote(state)}"
 
     return HttpResponseRedirect(github_install_url)
 
@@ -49,19 +56,19 @@ def connect(request: HttpRequest) -> HttpResponse:
 @authentication_classes([AuditAuthentication])
 def setup(request: HttpRequest) -> HttpResponse:
     """
-    GitHub App installation callback.
-    Validates state, creates/fetches the Installation record, stores installation_id
-    in session, and redirects to repo picker.
+    GitHub App installation callback. Validates the nonce carried in `state`,
+    creates/fetches the Installation, stores installation_id in session, and
+    redirects to the allowlisted `return_to` (or `/repo-picker` by default).
     """
-    state = request.GET.get("state")
+    raw_state = request.GET.get("state")
     installation_id = request.GET.get("installation_id")
 
-    # Validate state
-    stored_state = request.session.get("github_oauth_state")
-    if not state or state != stored_state:
+    nonce, return_to = parse_state(raw_state) if raw_state else (None, None)
+
+    stored_nonce = request.session.get("github_oauth_state")
+    if not nonce or nonce != stored_nonce:
         return HttpResponse("Invalid state parameter", status=400)
 
-    # Validate installation_id
     if not installation_id:
         return HttpResponse("Missing installation_id", status=400)
 
@@ -74,7 +81,6 @@ def setup(request: HttpRequest) -> HttpResponse:
             "Invalid installation_id (must be positive integer)", status=400
         )
 
-    # Fetch installation metadata from GitHub and persist locally.
     try:
         info = get_installation_info(installation_id_int)
     except InstallationNotFoundError:
@@ -93,13 +99,15 @@ def setup(request: HttpRequest) -> HttpResponse:
             account_type=info.account_type,
         )
 
-    # Store installation_id in session and consume state (one-time use).
     request.session["installation_id"] = installation_id_int
 
-    if request.session.get("github_oauth_state") == state:
+    # Consume the one-time nonce.
+    if request.session.get("github_oauth_state") == nonce:
         del request.session["github_oauth_state"]
     request.session.save()
 
+    if is_allowed_return_to(return_to, settings.AUDIT_ALLOWED_RETURN_ORIGINS):
+        return redirect(return_to)
     return redirect("/repo-picker")
 
 
