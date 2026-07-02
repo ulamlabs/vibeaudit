@@ -268,14 +268,10 @@ REPORT_TEMPLATE_PATH = env("REPORT_TEMPLATE_PATH", default="")
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# --- Cross-origin funnel (ulam.io) -----------------------------------------
-# ulam.io and vibeaudit.ulam.io are same-site (shared registrable domain), so
-# the session cookie stays host-only with SameSite=Lax and rides credentialed
-# cross-origin fetches. SECURITY: this — together with the CORS allowlist — is
-# the CSRF defense (see audit/authentication.py). If vibeaudit ever moves off
-# *.ulam.io, the cookie needs SameSite=None and CSRF protection must return.
-SESSION_COOKIE_SAMESITE = "Lax"
-CSRF_COOKIE_SAMESITE = "Lax"
+# Set "None" per-env for cross-site frontends (e.g. preview.ulam.pro); default "Lax".
+# With None the CSRF defense is the CORS allowlist alone (AUDIT_ENFORCE_CSRF off).
+SESSION_COOKIE_SAMESITE = env.str("SESSION_COOKIE_SAMESITE", default="Lax")
+CSRF_COOKIE_SAMESITE = env.str("CSRF_COOKIE_SAMESITE", default="Lax")
 SESSION_COOKIE_SECURE = env.bool("SESSION_COOKIE_SECURE", default=True)
 CSRF_COOKIE_SECURE = env.bool("CSRF_COOKIE_SECURE", default=True)
 
