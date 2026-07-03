@@ -86,6 +86,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}
+          # priority decides steps.meta.outputs.version (fed to APP_IMAGE_TAG):
+          # git tag (600) > immutable sha (200) > latest (100).
+          tags: |
+            type=ref,event=tag
+            type=sha,format=short,priority=200
+            type=raw,value=latest,enable={{is_default_branch}},priority=100
+
       - name: Build and push Docker image
         # Push to GHCR only on master branch; always build to catch issues early
         uses: docker/build-push-action@v7
@@ -94,4 +106,8 @@ jobs:
           file: docker/Dockerfile
           platforms: linux/amd64
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-          tags: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:latest
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            APP_COMMIT=${{ github.sha }}
+            APP_IMAGE_TAG=${{ steps.meta.outputs.version }}

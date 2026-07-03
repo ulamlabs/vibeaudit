@@ -35,6 +35,13 @@ RUN uv sync --locked --no-dev --no-install-project
 COPY backend/ ./
 RUN uv sync --locked --no-dev
 
+# Build metadata surfaced by the /api/healthz endpoint. Defaults keep dev builds
+# non-empty; CI passes the real values as --build-arg.
+ARG APP_COMMIT="dev"
+ARG APP_IMAGE_TAG="dev"
+ENV APP_COMMIT=$APP_COMMIT \
+    APP_IMAGE_TAG=$APP_IMAGE_TAG
+
 # Copy built frontend output into separate Django template/static locations.
 RUN mkdir -p ./vibeaudit/templates
 COPY --from=frontend-build /frontend/dist/index.html ./vibeaudit/templates/index.html
