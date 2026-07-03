@@ -261,8 +261,9 @@ class AuditSuite(models.Model):
     def resolve_ai_run_limits(self) -> tuple[int, float]:
         """Resolve per-run agent guardrails. Returns (recursion_limit, max_run_cost_usd).
 
-        The recursion limit is global; only the cost cap is overridable per suite.
-        0 for either means disabled.
+        The recursion limit is global (settings.AI_RECURSION_LIMIT). Only the cost cap
+        is overridable per suite; a suite value of 0 falls back to
+        settings.AI_MAX_RUN_COST_USD. A resolved 0 disables that guard downstream.
         """
         max_run_cost = self.max_run_cost_usd or settings.AI_MAX_RUN_COST_USD
         return settings.AI_RECURSION_LIMIT, float(max_run_cost)
