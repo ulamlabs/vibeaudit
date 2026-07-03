@@ -115,9 +115,11 @@ def execute_audit_run(self, run_id: int) -> None:
                 f"the budget of ${exc.budget:.2f}."
             )
         else:
+            # Append the exception text rather than the local recursion_limit: when
+            # it is 0 the config omits the key and LangGraph enforces its own default,
+            # so the local var may not match the limit that actually fired.
             reason = (
-                f"Run stopped by guard: orchestrator recursion limit of "
-                f"{recursion_limit} reached."
+                f"Run stopped by guard: orchestrator recursion limit reached. {exc}"
             )
         run.status = AuditRun.Status.FAILED
         run.error = reason

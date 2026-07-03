@@ -33,7 +33,10 @@ def get_llm(model_name: str, budget_usd: float = 0):
         if budget_usd > 0:
             from audit.ai.budget import CostBudgetCallback
 
-            model.callbacks = [CostBudgetCallback(budget_usd, model_name)]
+            model.callbacks = [
+                *(model.callbacks or []),
+                CostBudgetCallback(budget_usd, model_name),
+            ]
         return model
 
     if budget_usd > 0:

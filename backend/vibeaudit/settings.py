@@ -250,19 +250,21 @@ AI_REQUESTS_PER_SECOND = env.float("AI_REQUESTS_PER_SECOND", default=0)
 AI_MAX_TOKENS = env.int("AI_MAX_TOKENS", default=0)
 
 # Per-run agent guardrails against runaway loops / cost from a prompt-injected or
-# pathological repo. Both are overridable per-suite (AuditSuite fields); 0 there
-# falls back to these. 0 here = disabled.
+# pathological repo.
 #
 # AI_RECURSION_LIMIT bounds the orchestrator graph's loop length (LangGraph
-# super-steps). A true runaway blows into the thousands, so 100 catches it while
-# clearing normal multi-subagent runs. Note: this bounds only the orchestrator;
-# subagents keep deepagents' own recursion budget, so AI_MAX_RUN_COST_USD is the
-# cross-cutting cap.
+# super-steps). It is global (not per-suite). A true runaway blows into the
+# thousands, so 100 catches it while clearing normal multi-subagent runs. Note: this
+# bounds only the orchestrator; subagents keep deepagents' own recursion budget, so
+# AI_MAX_RUN_COST_USD is the cross-cutting cap. 0 omits the LangGraph config key, so
+# LangGraph's own default applies rather than fully disabling the bound.
 AI_RECURSION_LIMIT = env.int("AI_RECURSION_LIMIT", default=100)
 # AI_MAX_RUN_COST_USD is the cumulative estimated dollar budget for a whole run
 # (orchestrator + all subagents), priced via litellm. The guard is proactive (refuses
 # a call whose estimate would breach the budget); worst-case overshoot is one in-flight
 # call, itself bounded by the context window + AI_MAX_TOKENS. Tune from observed spend.
+# Overridable per-suite via AuditSuite.max_run_cost_usd; a suite value of 0 falls back
+# to this. A resolved 0 disables the budget guard.
 AI_MAX_RUN_COST_USD = env.float("AI_MAX_RUN_COST_USD", default=25.0)
 
 # Defaults for Celery audit execution time limits.
