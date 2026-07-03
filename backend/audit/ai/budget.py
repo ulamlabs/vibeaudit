@@ -1,30 +1,11 @@
-"""Cumulative dollar-cost guard for an audit run.
-
-`CostBudgetCallback` is a LangChain callback that estimates and accumulates the USD
-cost of every model call and aborts the run once a budget is exceeded. It is attached
-to the *model instance* (`model.callbacks = [handler]`) rather than passed via the
-invoke `config`, because deepagents does not reliably forward config-level callbacks to
-subagent LLM calls. The orchestrator and all specialist subagents share one model
-instance, so a single handler prices the whole run.
-
-The guard is proactive: `on_chat_model_start` estimates the pending call's cost with
-`litellm.token_counter` and refuses to start it if that would breach the budget, so in
-the common case the run stops *before* the offending call. `on_llm_end` reconciles with
-the provider's real token usage (including prompt-cache buckets). The hard overshoot
-bound is one call's actual cost, itself bounded by the context window + `AI_MAX_TOKENS`.
-
-Cost math is delegated to litellm's `cost_per_token`, which expects `prompt_tokens` as
-the *total* input (cache tokens included) and subtracts the cache buckets internally.
-"""
-
 import logging
 import threading
 
 import litellm
 from django.conf import settings
 from langchain_core.callbacks import BaseCallbackHandler
-from langchain_core.messages import convert_to_openai_messages
-from langchain_core.outputs import LLMResult
+from langchain_core.messages import AIMessage, convert_to_openai_messages
+from langchain_core.outputs import ChatGeneration, LLMResult
 
 logger = logging.getLogger(__name__)
 
@@ -42,12 +23,7 @@ class CostBudgetExceeded(Exception):
 
 
 class CostBudgetCallback(BaseCallbackHandler):
-    """Accumulate USD cost across model calls and abort when over budget.
-
-    Attach to the model instance so it covers orchestrator *and* subagent calls (see
-    module docstring). `raise_error = True` propagates the exception out of the callback
-    manager instead of logging and swallowing it.
-    """
+    """Accumulate USD cost across model calls and abort when over budget."""
 
     raise_error = True
 
@@ -109,11 +85,12 @@ class CostBudgetCallback(BaseCallbackHandler):
         used = 0.0
         for generations in response.generations:
             for generation in generations:
-                usage = getattr(
-                    getattr(generation, "message", None), "usage_metadata", None
-                )
-                if not usage:
+                if not isinstance(generation, ChatGeneration):
                     continue
+                message = generation.message
+                if not isinstance(message, AIMessage) or not message.usage_metadata:
+                    continue
+                usage = message.usage_metadata
                 details = usage.get("input_token_details") or {}
                 used += self._cost(
                     usage.get("input_tokens", 0),
