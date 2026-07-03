@@ -5,7 +5,9 @@ import git
 from celery import shared_task
 from django.conf import settings
 from django.utils import timezone
+from langgraph.errors import GraphRecursionError
 
+from audit.ai.budget import CostBudgetExceeded
 from audit.ai.runner import run_pipeline
 from audit.ai.suites import suite_to_agent_definitions
 from audit.email import (
@@ -77,10 +79,18 @@ def execute_audit_run(self, run_id: int) -> None:
     run.started_at = timezone.now()
     run.save(update_fields=["status", "started_at"])
 
+    recursion_limit, max_run_cost = suite.resolve_ai_run_limits()
+
     try:
         agents = suite_to_agent_definitions(suite)
         result = run_pipeline(
-            job, agents, suite.model, suite.orchestrator_prompt or None, run_id=run_id
+            job,
+            agents,
+            suite.model,
+            suite.orchestrator_prompt or None,
+            run_id=run_id,
+            recursion_limit=recursion_limit,
+            max_run_cost=max_run_cost,
         )
         report = result.report
 
@@ -98,6 +108,22 @@ def execute_audit_run(self, run_id: int) -> None:
                 for i, cap in enumerate(result.agent_outputs)
             ]
         )
+    except (CostBudgetExceeded, GraphRecursionError) as exc:
+        if isinstance(exc, CostBudgetExceeded):
+            reason = (
+                f"Run stopped by guard: estimated cost ${exc.used:.2f} would exceed "
+                f"the budget of ${exc.budget:.2f}."
+            )
+        else:
+            reason = (
+                f"Run stopped by guard: orchestrator recursion limit of "
+                f"{recursion_limit} reached."
+            )
+        run.status = AuditRun.Status.FAILED
+        run.error = reason
+        run.finished_at = timezone.now()
+        run.save(update_fields=["status", "error", "finished_at"])
+        send_failure_email(run)
     except Exception as exc:  # noqa: BLE001
         run.status = AuditRun.Status.FAILED
         run.error = str(exc)

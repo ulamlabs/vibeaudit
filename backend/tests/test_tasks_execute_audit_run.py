@@ -2,7 +2,9 @@ from unittest.mock import patch
 
 import pytest
 from django.test import override_settings
+from langgraph.errors import GraphRecursionError
 
+from audit.ai.budget import CostBudgetExceeded
 from audit.ai.output import PipelineReport
 from audit.ai.runner import AgentOutputCapture, PipelineResult
 from audit.models import AgentRunOutput, AuditAgent, AuditJob, AuditRun, AuditSuite
@@ -91,6 +93,28 @@ def test_execute_audit_run_marks_failed_on_error(installation, suite):
     run.refresh_from_db()
     assert run.status == AuditRun.Status.FAILED
     assert "boom" in run.error
+
+
+@pytest.mark.django_db
+def test_execute_audit_run_reports_cost_budget_guard(installation, suite):
+    job = _ready_job(installation)
+    run = AuditRun.objects.create(job=job, suite=suite)
+    with patch("audit.tasks.run_pipeline", side_effect=CostBudgetExceeded(30.0, 25.0)):
+        execute_audit_run(run.pk)
+    run.refresh_from_db()
+    assert run.status == AuditRun.Status.FAILED
+    assert "budget" in run.error and "$25.00" in run.error
+
+
+@pytest.mark.django_db
+def test_execute_audit_run_reports_recursion_guard(installation, suite):
+    job = _ready_job(installation)
+    run = AuditRun.objects.create(job=job, suite=suite)
+    with patch("audit.tasks.run_pipeline", side_effect=GraphRecursionError("loop")):
+        execute_audit_run(run.pk)
+    run.refresh_from_db()
+    assert run.status == AuditRun.Status.FAILED
+    assert "recursion limit" in run.error
 
 
 @pytest.mark.django_db

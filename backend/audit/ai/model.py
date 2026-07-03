@@ -1,4 +1,8 @@
+import logging
+
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 
 def _rate_limiter():
@@ -10,7 +14,7 @@ def _rate_limiter():
     return InMemoryRateLimiter(requests_per_second=rps, check_every_n_seconds=0.1)
 
 
-def get_llm(model_name: str):
+def get_llm(model_name: str, budget_usd: float = 0):
     """Return a model for DeepAgents — a ChatAnthropic instance or a provider:model string."""
     provider = settings.AI_MODEL_PROVIDER
 
@@ -25,6 +29,17 @@ def get_llm(model_name: str):
         max_tokens = settings.AI_MAX_TOKENS
         if max_tokens:
             kwargs["max_tokens"] = max_tokens
-        return ChatAnthropic(**kwargs)
+        model = ChatAnthropic(**kwargs)
+        if budget_usd > 0:
+            from audit.ai.budget import CostBudgetCallback
 
+            model.callbacks = [CostBudgetCallback(budget_usd, model_name)]
+        return model
+
+    if budget_usd > 0:
+        logger.warning(
+            "Cost budget requested but provider '%s' returns a model string; "
+            "the budget is unenforced (only 'anthropic' is instrumented).",
+            provider,
+        )
     return f"{provider}:{model_name}"

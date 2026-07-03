@@ -1,6 +1,12 @@
-from unittest.mock import patch
+import os
 
-import pytest
+# Price litellm from its bundled snapshot (no startup GitHub fetch) so cost
+# assertions are deterministic. Must be set before litellm is first imported.
+os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "true")
+
+from unittest.mock import patch  # noqa: E402
+
+import pytest  # noqa: E402
 
 
 @pytest.fixture(autouse=True)

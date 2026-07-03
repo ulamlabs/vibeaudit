@@ -130,8 +130,10 @@ def _run_orchestrator(
     *,
     run_id: int | None = None,
     repo_name: str | None = None,
+    recursion_limit: int = 0,
+    max_run_cost: float = 0,
 ):
-    model = get_llm(model_name)
+    model = get_llm(model_name, budget_usd=max_run_cost)
     agent = create_deep_agent(
         model=model,
         system_prompt=_build_orchestrator_system_prompt(agents),
@@ -140,6 +142,9 @@ def _run_orchestrator(
         response_format=ToolStrategy(schema=SubmittedReport),
     )
     label = f"run={run_id} repo={repo_name}" if run_id and repo_name else "audit"
+    config: dict = {"run_name": label}
+    if recursion_limit:
+        config["recursion_limit"] = recursion_limit
     state = agent.invoke(
         {
             "messages": [
@@ -149,7 +154,7 @@ def _run_orchestrator(
                 }
             ]
         },
-        config={"run_name": label},
+        config=config,
     )
 
     submitted = state.get("structured_response") if isinstance(state, dict) else None
@@ -170,6 +175,8 @@ def run_pipeline(
     orchestrator_prompt: str | None = None,
     *,
     run_id: int | None = None,
+    recursion_limit: int = 0,
+    max_run_cost: float = 0,
 ) -> PipelineResult:
     """Run the orchestrated audit over the cloned repo and return a PipelineResult."""
     repo_name = job.repo_full_name or Path(str(job.clone_path)).name
@@ -180,6 +187,8 @@ def run_pipeline(
         orchestrator_prompt,
         run_id=run_id,
         repo_name=repo_name,
+        recursion_limit=recursion_limit,
+        max_run_cost=max_run_cost,
     )
     report = PipelineReport(
         job_id=str(job.pk),

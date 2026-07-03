@@ -185,6 +185,16 @@ class AuditSuite(models.Model):
         blank=True,
         help_text="Optional Celery hard time limit override in seconds for runs started with this suite.",
     )
+    max_run_cost_usd = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text=(
+            "Optional override for the cumulative estimated dollar budget of a whole "
+            "run (orchestrator + subagents). Blank/0 falls back to AI_MAX_RUN_COST_USD."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     agents: models.ManyToManyField["AuditAgent", "AuditAgent"] = models.ManyToManyField(
         "AuditAgent",
@@ -247,6 +257,15 @@ class AuditSuite(models.Model):
             hard_limit = soft_limit + 1
 
         return soft_limit, hard_limit
+
+    def resolve_ai_run_limits(self) -> tuple[int, float]:
+        """Resolve per-run agent guardrails. Returns (recursion_limit, max_run_cost_usd).
+
+        The recursion limit is global; only the cost cap is overridable per suite.
+        0 for either means disabled.
+        """
+        max_run_cost = self.max_run_cost_usd or settings.AI_MAX_RUN_COST_USD
+        return settings.AI_RECURSION_LIMIT, float(max_run_cost)
 
     def __str__(self):
         return self.name
