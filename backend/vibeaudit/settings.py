@@ -22,6 +22,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 env = environ.Env()
 environ.Env.read_env(BASE_DIR / ".env")
 
+# Build metadata reported by the /api/healthz endpoint, injected at build time.
+APP_COMMIT = env("APP_COMMIT", default="dev")
+APP_IMAGE_TAG = env("APP_IMAGE_TAG", default="dev")
+
 BACKEND_SENTRY_DSN = env("BACKEND_SENTRY_DSN", default="")
 if BACKEND_SENTRY_DSN:
     sentry_sdk.init(
