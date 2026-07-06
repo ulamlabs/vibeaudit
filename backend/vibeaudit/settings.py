@@ -268,7 +268,7 @@ REPORT_TEMPLATE_PATH = env("REPORT_TEMPLATE_PATH", default="")
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# Set "None" per-env for cross-site frontends (e.g. preview.ulam.pro); default "Lax".
+# Set "None" per-env for cross-site frontends; default "Lax".
 # With None the CSRF defense is the CORS allowlist alone (AUDIT_ENFORCE_CSRF off).
 SESSION_COOKIE_SAMESITE = env.str("SESSION_COOKIE_SAMESITE", default="Lax")
 CSRF_COOKIE_SAMESITE = env.str("CSRF_COOKIE_SAMESITE", default="Lax")
