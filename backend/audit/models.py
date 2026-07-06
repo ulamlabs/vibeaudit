@@ -310,6 +310,16 @@ class AuditRun(models.Model):
         blank=True, help_text="Report body (no top-level title)."
     )
     error = models.TextField(blank=True)
+    cost_usd = models.DecimalField(
+        max_digits=10,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        help_text=(
+            "Actual cumulative USD cost of this run (orchestrator + subagents), "
+            "measured across model calls. Null when not tracked."
+        ),
+    )
     celery_task_id = models.CharField(
         max_length=36, blank=True, help_text="Celery task ID for tracking/revoking."
     )

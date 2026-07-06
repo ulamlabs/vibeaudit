@@ -30,22 +30,20 @@ def test_resolve_ai_run_limits_prefers_suite_cost_override() -> None:
 
 
 @override_settings(AI_MODEL_PROVIDER="anthropic", AI_ANTHROPIC_API_KEY="test-key")
-def test_get_llm_attaches_cost_callback_when_budget_set() -> None:
-    model = get_llm(MODEL, budget_usd=5.0)
-    assert len(model.callbacks) == 1
-    cb = model.callbacks[0]
-    assert isinstance(cb, CostBudgetCallback)
-    assert cb.budget == 5.0
-    assert cb.model_name == MODEL
+def test_get_llm_attaches_cost_callback_when_provided() -> None:
+    cb = CostBudgetCallback(budget_usd=5.0, model_name=MODEL)
+    model = get_llm(MODEL, cost_callback=cb)
+    assert model.callbacks == [cb]
 
 
 @override_settings(AI_MODEL_PROVIDER="anthropic", AI_ANTHROPIC_API_KEY="test-key")
-def test_get_llm_no_callback_when_budget_zero() -> None:
-    model = get_llm(MODEL, budget_usd=0)
+def test_get_llm_no_callback_when_none() -> None:
+    model = get_llm(MODEL, cost_callback=None)
     assert not model.callbacks
 
 
-def test_run_orchestrator_threads_budget_and_recursion_limit(tmp_path) -> None:
+def test_run_orchestrator_threads_cost_callback_and_recursion_limit(tmp_path) -> None:
+    cb = CostBudgetCallback(budget_usd=12.5, model_name=MODEL)
     with (
         patch("audit.ai.runner.get_llm", return_value="fake-model") as get_llm_mock,
         patch("audit.ai.runner.create_deep_agent") as create_agent,
@@ -63,9 +61,9 @@ def test_run_orchestrator_threads_budget_and_recursion_limit(tmp_path) -> None:
             run_id=1,
             repo_name="r",
             recursion_limit=50,
-            max_run_cost=12.5,
+            cost_callback=cb,
         )
 
-    get_llm_mock.assert_called_once_with(MODEL, budget_usd=12.5)
+    get_llm_mock.assert_called_once_with(MODEL, cost_callback=cb)
     config = agent.invoke.call_args.kwargs["config"]
     assert config["recursion_limit"] == 50

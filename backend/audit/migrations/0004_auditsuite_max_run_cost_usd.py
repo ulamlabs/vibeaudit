@@ -20,4 +20,15 @@ class Migration(migrations.Migration):
                 null=True,
             ),
         ),
+        migrations.AddField(
+            model_name="auditrun",
+            name="cost_usd",
+            field=models.DecimalField(
+                blank=True,
+                decimal_places=4,
+                help_text="Actual cumulative USD cost of this run (orchestrator + subagents), measured across model calls. Null when not tracked.",
+                max_digits=10,
+                null=True,
+            ),
+        ),
     ]

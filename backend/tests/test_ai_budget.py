@@ -65,6 +65,20 @@ def test_on_llm_end_missing_usage_is_zero() -> None:
     assert cb.total == 0.0
 
 
+def test_track_only_accumulates_without_raising_when_no_budget() -> None:
+    # budget 0 => enforce disabled: the callback is a pure accumulator.
+    cb = CostBudgetCallback(budget_usd=0.0, model_name=MODEL)
+    assert cb.enforce is False
+    cb.on_llm_end(_llm_result(1_000_000, 100_000))  # far over any real budget; no raise
+    assert cb.total > 0.0
+    assert cb.tracked is True
+
+
+def test_tracked_stays_false_until_a_result_is_seen() -> None:
+    cb = CostBudgetCallback(budget_usd=0.0, model_name=MODEL)
+    assert cb.tracked is False
+
+
 def test_pre_call_gate_refuses_when_estimate_breaches_budget() -> None:
     # Tiny prompt, but assumed worst-case output alone (~64k tokens) blows a $0.01 cap.
     cb = CostBudgetCallback(budget_usd=0.01, model_name=MODEL)

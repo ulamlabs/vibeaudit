@@ -31,6 +31,8 @@ class CostBudgetCallback(BaseCallbackHandler):
         self.budget = budget_usd
         self.model_name = model_name
         self.total = 0.0
+        self.enforce = budget_usd > 0
+        self.tracked = False
         self._lock = threading.Lock()
 
     def _cost(
@@ -78,7 +80,7 @@ class CostBudgetCallback(BaseCallbackHandler):
 
         with self._lock:
             projected = self.total + est_cost
-            if projected > self.budget:
+            if self.enforce and projected > self.budget:
                 raise CostBudgetExceeded(projected, self.budget)
 
     def on_llm_end(self, response: LLMResult, **kwargs) -> None:
@@ -101,5 +103,6 @@ class CostBudgetCallback(BaseCallbackHandler):
 
         with self._lock:
             self.total += used
-            if self.total > self.budget:
+            self.tracked = True
+            if self.enforce and self.total > self.budget:
                 raise CostBudgetExceeded(self.total, self.budget)

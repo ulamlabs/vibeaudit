@@ -1,3 +1,4 @@
+from decimal import Decimal
 from unittest.mock import patch
 
 import pytest
@@ -82,6 +83,52 @@ def test_execute_audit_run_persists_results_and_outputs(installation, suite):
     outputs = list(AgentRunOutput.objects.filter(run=run))
     assert len(outputs) == 1
     assert outputs[0].agent_id == "project_overview"
+
+
+@pytest.mark.django_db
+def test_execute_audit_run_records_measured_cost(installation, suite):
+    job = _ready_job(installation)
+    run = AuditRun.objects.create(job=job, suite=suite)
+
+    def _fake_pipeline(*args, cost_callback=None, **kwargs):
+        # Simulate the pipeline driving instrumented model calls.
+        cost_callback.total = 1.2345
+        cost_callback.tracked = True
+        return _result()
+
+    with patch("audit.tasks.run_pipeline", side_effect=_fake_pipeline):
+        execute_audit_run(run.pk)
+    run.refresh_from_db()
+    assert run.status == AuditRun.Status.COMPLETED
+    assert run.cost_usd == Decimal("1.2345")
+
+
+@pytest.mark.django_db
+def test_execute_audit_run_records_partial_cost_on_failure(installation, suite):
+    job = _ready_job(installation)
+    run = AuditRun.objects.create(job=job, suite=suite)
+
+    def _fail_after_spend(*args, cost_callback=None, **kwargs):
+        cost_callback.total = 0.5
+        cost_callback.tracked = True
+        raise RuntimeError("boom")
+
+    with patch("audit.tasks.run_pipeline", side_effect=_fail_after_spend):
+        execute_audit_run(run.pk)
+    run.refresh_from_db()
+    assert run.status == AuditRun.Status.FAILED
+    assert run.cost_usd == Decimal("0.5000")
+
+
+@pytest.mark.django_db
+def test_execute_audit_run_leaves_cost_null_when_untracked(installation, suite):
+    job = _ready_job(installation)
+    run = AuditRun.objects.create(job=job, suite=suite)
+    # run_pipeline mock never touches the callback => tracked stays False.
+    with patch("audit.tasks.run_pipeline", return_value=_result()):
+        execute_audit_run(run.pk)
+    run.refresh_from_db()
+    assert run.cost_usd is None
 
 
 @pytest.mark.django_db

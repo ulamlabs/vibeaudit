@@ -14,7 +14,7 @@ def _rate_limiter():
     return InMemoryRateLimiter(requests_per_second=rps, check_every_n_seconds=0.1)
 
 
-def get_llm(model_name: str, budget_usd: float = 0):
+def get_llm(model_name: str, cost_callback=None):
     """Return a model for DeepAgents — a ChatAnthropic instance or a provider:model string."""
     provider = settings.AI_MODEL_PROVIDER
 
@@ -30,19 +30,15 @@ def get_llm(model_name: str, budget_usd: float = 0):
         if max_tokens:
             kwargs["max_tokens"] = max_tokens
         model = ChatAnthropic(**kwargs)
-        if budget_usd > 0:
-            from audit.ai.budget import CostBudgetCallback
-
-            model.callbacks = [
-                *(model.callbacks or []),
-                CostBudgetCallback(budget_usd, model_name),
-            ]
+        if cost_callback is not None:
+            model.callbacks = [*(model.callbacks or []), cost_callback]
         return model
 
-    if budget_usd > 0:
+    if cost_callback is not None:
         logger.warning(
-            "Cost budget requested but provider '%s' returns a model string; "
-            "the budget is unenforced (only 'anthropic' is instrumented).",
+            "Cost callback provided but provider '%s' returns a model string; "
+            "cost is untracked and any budget is unenforced (only 'anthropic' is "
+            "instrumented).",
             provider,
         )
     return f"{provider}:{model_name}"

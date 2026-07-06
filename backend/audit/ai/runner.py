@@ -131,9 +131,9 @@ def _run_orchestrator(
     run_id: int | None = None,
     repo_name: str | None = None,
     recursion_limit: int = 0,
-    max_run_cost: float = 0,
+    cost_callback=None,
 ):
-    model = get_llm(model_name, budget_usd=max_run_cost)
+    model = get_llm(model_name, cost_callback=cost_callback)
     agent = create_deep_agent(
         model=model,
         system_prompt=_build_orchestrator_system_prompt(agents),
@@ -176,7 +176,7 @@ def run_pipeline(
     *,
     run_id: int | None = None,
     recursion_limit: int = 0,
-    max_run_cost: float = 0,
+    cost_callback=None,
 ) -> PipelineResult:
     """Run the orchestrated audit over the cloned repo and return a PipelineResult."""
     repo_name = job.repo_full_name or Path(str(job.clone_path)).name
@@ -188,7 +188,7 @@ def run_pipeline(
         run_id=run_id,
         repo_name=repo_name,
         recursion_limit=recursion_limit,
-        max_run_cost=max_run_cost,
+        cost_callback=cost_callback,
     )
     report = PipelineReport(
         job_id=str(job.pk),
