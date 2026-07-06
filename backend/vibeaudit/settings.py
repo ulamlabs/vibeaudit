@@ -57,12 +57,14 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "anymail",
     "rest_framework",
+    "corsheaders",
     "github_app",
     "audit",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -265,3 +267,19 @@ REPORT_TEMPLATE_PATH = env("REPORT_TEMPLATE_PATH", default="")
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Set "None" per-env for cross-site frontends; default "Lax".
+# With None the CSRF defense is the CORS allowlist alone (AUDIT_ENFORCE_CSRF off).
+SESSION_COOKIE_SAMESITE = env.str("SESSION_COOKIE_SAMESITE", default="Lax")
+CSRF_COOKIE_SAMESITE = env.str("CSRF_COOKIE_SAMESITE", default="Lax")
+SESSION_COOKIE_SECURE = env.bool("SESSION_COOKIE_SECURE", default=True)
+CSRF_COOKIE_SECURE = env.bool("CSRF_COOKIE_SECURE", default=True)
+
+# CORS — concrete origins are supplied per-environment by vibeaudit-infra.
+CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
+CORS_ALLOW_CREDENTIALS = True
+
+# Allowlisted origins the GitHub install flow may redirect back to (open-redirect
+# boundary for the `return_to` carried in the install `state`).
+AUDIT_ALLOWED_RETURN_ORIGINS = env.list("AUDIT_ALLOWED_RETURN_ORIGINS", default=[])
+AUDIT_ENFORCE_CSRF = env.bool("AUDIT_ENFORCE_CSRF", default=False)

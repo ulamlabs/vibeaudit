@@ -4,7 +4,11 @@ from rest_framework.authentication import SessionAuthentication
 
 
 class AuditAuthentication(SessionAuthentication):
-    """Enforce session authentication unless unauthenticated audits are allowed."""
+    """Session auth for the audit funnel. CSRF enforcement is opt-in via AUDIT_ENFORCE_CSRF."""
+
+    def enforce_csrf(self, request):
+        if settings.AUDIT_ENFORCE_CSRF:
+            super().enforce_csrf(request)
 
     def authenticate(self, request):
         user_auth_tuple = super().authenticate(request)

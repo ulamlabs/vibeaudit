@@ -1,5 +1,6 @@
 import logging
 
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.permissions import IsAuthenticated
@@ -22,7 +23,6 @@ class StartAuditView(APIView):
     """
     Start a new audit job for a repository.
     Requires installation_id in session.
-    If ALLOW_UNAUTHENTICATED_AUDIT is False, requires authenticated user.
     """
 
     authentication_classes = [AuditAuthentication]
@@ -88,8 +88,34 @@ class StartAuditView(APIView):
 
         clone_repo.delay(audit_job.pk)
 
+        job_ids = request.session.get("audit_job_ids", [])
+        job_ids.append(audit_job.pk)
+        request.session["audit_job_ids"] = job_ids
+        request.session.save()
+
         output_serializer = AuditJobSerializer(audit_job)
         return Response(output_serializer.data, status=201)
+
+
+class AuditSessionView(APIView):
+    """
+    GET /api/audit/session — counts of audits submitted by this session.
+
+    Derived from session job ids, so it stays accurate after the installation is
+    auto-deleted post-clone (when /api/github/installations 404s).
+    """
+
+    authentication_classes = [AuditAuthentication]
+
+    def get(self, request):
+        job_ids = request.session.get("audit_job_ids", [])
+        # FAILED jobs count toward submitted too; harmless since failure keeps the
+        # install live and the funnel resumes at the picker (no note shown there).
+        counts = AuditJob.objects.filter(pk__in=job_ids).aggregate(
+            submitted_count=Count("pk"),
+            active_count=Count("pk", filter=Q(state__in=AuditJob.ACTIVE_STATES)),
+        )
+        return Response(counts)
 
 
 class MeView(APIView):
