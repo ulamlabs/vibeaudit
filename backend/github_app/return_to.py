@@ -1,4 +1,5 @@
 import base64
+from typing import TypeGuard
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, field_validator, ValidationError
@@ -40,7 +41,7 @@ def origin_of(url: str) -> str | None:
     return f"{parts.scheme}://{parts.netloc}"
 
 
-def is_allowed_return_to(url: str | None, allowed_origins: list[str]) -> bool:
+def is_allowed_return_to(url: str | None, allowed_origins: list[str]) -> TypeGuard[str]:
     if not url:
         return False
     origin = origin_of(url)
