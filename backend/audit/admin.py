@@ -161,7 +161,7 @@ class AgentRunOutputInline(TabularInline):
 @admin.register(AuditRun)
 class AuditRunAdmin(ModelAdmin):
     form = AuditRunForm
-    list_display = ["id", "job", "suite", "status", "created_at"]
+    list_display = ["id", "job", "suite", "status", "cost_usd", "created_at"]
     list_filter = ["status", "suite", "job"]
     search_fields = ["job__repo_full_name"]
     inlines = [AgentRunOutputInline]
@@ -171,6 +171,7 @@ class AuditRunAdmin(ModelAdmin):
         "report_html",
         "report_raw",
         "error",
+        "cost_usd",
         "created_at",
         "started_at",
         "finished_at",
@@ -201,6 +202,7 @@ class AuditRunAdmin(ModelAdmin):
             "report_html",
             "report_raw",
             "error",
+            "cost_usd",
             "celery_task_id",
             "created_at",
             "started_at",

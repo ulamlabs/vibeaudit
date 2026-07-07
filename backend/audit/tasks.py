@@ -1,11 +1,14 @@
 import logging
 import shutil
+from decimal import Decimal
 
 import git
 from celery import shared_task
 from django.conf import settings
 from django.utils import timezone
+from langgraph.errors import GraphRecursionError
 
+from audit.ai.budget import CostBudgetCallback, CostBudgetExceeded
 from audit.ai.runner import run_pipeline
 from audit.ai.suites import suite_to_agent_definitions
 from audit.email import (
@@ -17,6 +20,12 @@ from audit.models import AgentRunOutput, AuditJob, AuditRun
 from github_app.github import get_installation_token
 
 logger = logging.getLogger(__name__)
+
+
+def _measured_cost(cost_callback: CostBudgetCallback) -> Decimal | None:
+    if not cost_callback.tracked:
+        return None
+    return Decimal(str(round(cost_callback.total, 4)))
 
 
 @shared_task
@@ -88,18 +97,36 @@ def execute_audit_run(self, run_id: int) -> None:
     run.started_at = timezone.now()
     run.save(update_fields=["status", "started_at"])
 
+    recursion_limit, max_run_cost = suite.resolve_ai_run_limits()
+    cost_callback = CostBudgetCallback(max_run_cost, suite.model)
+
     try:
         agents = suite_to_agent_definitions(suite)
         result = run_pipeline(
-            job, agents, suite.model, suite.orchestrator_prompt or None, run_id=run_id
+            job,
+            agents,
+            suite.model,
+            suite.orchestrator_prompt or None,
+            run_id=run_id,
+            recursion_limit=recursion_limit,
+            cost_callback=cost_callback,
         )
         report = result.report
 
         run.summary = report.summary
         run.markdown = report.markdown
         run.status = AuditRun.Status.COMPLETED
+        run.cost_usd = _measured_cost(cost_callback)
         run.finished_at = timezone.now()
-        run.save(update_fields=["summary", "markdown", "status", "finished_at"])
+        run.save(
+            update_fields=[
+                "summary",
+                "markdown",
+                "status",
+                "cost_usd",
+                "finished_at",
+            ]
+        )
 
         AgentRunOutput.objects.bulk_create(
             [
@@ -109,11 +136,31 @@ def execute_audit_run(self, run_id: int) -> None:
                 for i, cap in enumerate(result.agent_outputs)
             ]
         )
+    except (CostBudgetExceeded, GraphRecursionError) as exc:
+        if isinstance(exc, CostBudgetExceeded):
+            reason = (
+                f"Run stopped by guard: estimated cost ${exc.used:.2f} would exceed "
+                f"the budget of ${exc.budget:.2f}."
+            )
+        else:
+            # Append the exception text rather than the local recursion_limit: when
+            # it is 0 the config omits the key and LangGraph enforces its own default,
+            # so the local var may not match the limit that actually fired.
+            reason = (
+                f"Run stopped by guard: orchestrator recursion limit reached. {exc}"
+            )
+        run.status = AuditRun.Status.FAILED
+        run.error = reason
+        run.cost_usd = _measured_cost(cost_callback)
+        run.finished_at = timezone.now()
+        run.save(update_fields=["status", "error", "cost_usd", "finished_at"])
+        send_failure_email(run)
     except Exception as exc:  # noqa: BLE001
         run.status = AuditRun.Status.FAILED
         run.error = str(exc)
+        run.cost_usd = _measured_cost(cost_callback)
         run.finished_at = timezone.now()
-        run.save(update_fields=["status", "error", "finished_at"])
+        run.save(update_fields=["status", "error", "cost_usd", "finished_at"])
         send_failure_email(run)
     finally:
         if not job.keep_sources:

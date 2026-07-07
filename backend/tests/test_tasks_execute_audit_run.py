@@ -1,8 +1,11 @@
+from decimal import Decimal
 from unittest.mock import patch
 
 import pytest
 from django.test import override_settings
+from langgraph.errors import GraphRecursionError
 
+from audit.ai.budget import CostBudgetExceeded
 from audit.ai.output import PipelineReport
 from audit.ai.runner import AgentOutputCapture, PipelineResult
 from audit.models import AgentRunOutput, AuditAgent, AuditJob, AuditRun, AuditSuite
@@ -83,6 +86,52 @@ def test_execute_audit_run_persists_results_and_outputs(installation, suite):
 
 
 @pytest.mark.django_db
+def test_execute_audit_run_records_measured_cost(installation, suite):
+    job = _ready_job(installation)
+    run = AuditRun.objects.create(job=job, suite=suite)
+
+    def _fake_pipeline(*args, cost_callback=None, **kwargs):
+        # Simulate the pipeline driving instrumented model calls.
+        cost_callback.total = 1.2345
+        cost_callback.tracked = True
+        return _result()
+
+    with patch("audit.tasks.run_pipeline", side_effect=_fake_pipeline):
+        execute_audit_run(run.pk)
+    run.refresh_from_db()
+    assert run.status == AuditRun.Status.COMPLETED
+    assert run.cost_usd == Decimal("1.2345")
+
+
+@pytest.mark.django_db
+def test_execute_audit_run_records_partial_cost_on_failure(installation, suite):
+    job = _ready_job(installation)
+    run = AuditRun.objects.create(job=job, suite=suite)
+
+    def _fail_after_spend(*args, cost_callback=None, **kwargs):
+        cost_callback.total = 0.5
+        cost_callback.tracked = True
+        raise RuntimeError("boom")
+
+    with patch("audit.tasks.run_pipeline", side_effect=_fail_after_spend):
+        execute_audit_run(run.pk)
+    run.refresh_from_db()
+    assert run.status == AuditRun.Status.FAILED
+    assert run.cost_usd == Decimal("0.5000")
+
+
+@pytest.mark.django_db
+def test_execute_audit_run_leaves_cost_null_when_untracked(installation, suite):
+    job = _ready_job(installation)
+    run = AuditRun.objects.create(job=job, suite=suite)
+    # run_pipeline mock never touches the callback => tracked stays False.
+    with patch("audit.tasks.run_pipeline", return_value=_result()):
+        execute_audit_run(run.pk)
+    run.refresh_from_db()
+    assert run.cost_usd is None
+
+
+@pytest.mark.django_db
 def test_execute_audit_run_marks_failed_on_error(installation, suite):
     job = _ready_job(installation)
     run = AuditRun.objects.create(job=job, suite=suite)
@@ -91,6 +140,28 @@ def test_execute_audit_run_marks_failed_on_error(installation, suite):
     run.refresh_from_db()
     assert run.status == AuditRun.Status.FAILED
     assert "boom" in run.error
+
+
+@pytest.mark.django_db
+def test_execute_audit_run_reports_cost_budget_guard(installation, suite):
+    job = _ready_job(installation)
+    run = AuditRun.objects.create(job=job, suite=suite)
+    with patch("audit.tasks.run_pipeline", side_effect=CostBudgetExceeded(30.0, 25.0)):
+        execute_audit_run(run.pk)
+    run.refresh_from_db()
+    assert run.status == AuditRun.Status.FAILED
+    assert "budget" in run.error and "$25.00" in run.error
+
+
+@pytest.mark.django_db
+def test_execute_audit_run_reports_recursion_guard(installation, suite):
+    job = _ready_job(installation)
+    run = AuditRun.objects.create(job=job, suite=suite)
+    with patch("audit.tasks.run_pipeline", side_effect=GraphRecursionError("loop")):
+        execute_audit_run(run.pk)
+    run.refresh_from_db()
+    assert run.status == AuditRun.Status.FAILED
+    assert "recursion limit" in run.error
 
 
 @pytest.mark.django_db

@@ -185,6 +185,16 @@ class AuditSuite(models.Model):
         blank=True,
         help_text="Optional Celery hard time limit override in seconds for runs started with this suite.",
     )
+    max_run_cost_usd = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text=(
+            "Optional override for the cumulative estimated dollar budget of a whole "
+            "run (orchestrator + subagents). Blank/0 falls back to AI_MAX_RUN_COST_USD."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     agents: models.ManyToManyField["AuditAgent", "AuditAgent"] = models.ManyToManyField(
         "AuditAgent",
@@ -248,6 +258,16 @@ class AuditSuite(models.Model):
 
         return soft_limit, hard_limit
 
+    def resolve_ai_run_limits(self) -> tuple[int, float]:
+        """Resolve per-run agent guardrails. Returns (recursion_limit, max_run_cost_usd).
+
+        The recursion limit is global (settings.AI_RECURSION_LIMIT). Only the cost cap
+        is overridable per suite; a suite value of 0 falls back to
+        settings.AI_MAX_RUN_COST_USD. A resolved 0 disables that guard downstream.
+        """
+        max_run_cost = self.max_run_cost_usd or settings.AI_MAX_RUN_COST_USD
+        return settings.AI_RECURSION_LIMIT, float(max_run_cost)
+
     def __str__(self):
         return self.name
 
@@ -290,6 +310,16 @@ class AuditRun(models.Model):
         blank=True, help_text="Report body (no top-level title)."
     )
     error = models.TextField(blank=True)
+    cost_usd = models.DecimalField(
+        max_digits=10,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        help_text=(
+            "Actual cumulative USD cost of this run (orchestrator + subagents), "
+            "measured across model calls. Null when not tracked."
+        ),
+    )
     celery_task_id = models.CharField(
         max_length=36, blank=True, help_text="Celery task ID for tracking/revoking."
     )
