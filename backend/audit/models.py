@@ -1,4 +1,5 @@
 import shutil
+from datetime import timedelta
 from pathlib import Path
 
 from django.conf import settings
@@ -7,6 +8,10 @@ from django.db import models, transaction
 from django.template import Template, TemplateSyntaxError
 from django.template.base import VariableNode
 from django.utils import timezone
+
+# Slack on top of a task's hard time limit before a stuck object counts as
+# overdue (the hard limit SIGKILLs the worker, skipping failure handling).
+OVERDUE_GRACE_SECONDS = 120
 
 
 class AuditJob(models.Model):
@@ -64,8 +69,19 @@ class AuditJob(models.Model):
         allowed = self.VALID_TRANSITIONS.get(self.state, [])
         if new_state not in allowed:
             raise ValueError(f"Cannot transition from {self.state!r} to {new_state!r}")
+        # Compare-and-set: the UPDATE only matches if the DB still holds the
+        # state we validated against, so two concurrent transitions (e.g. a
+        # double-clicked Approve) cannot both pass the guard.
+        updated = AuditJob.objects.filter(pk=self.pk, state=self.state).update(
+            state=new_state
+        )
+        if not updated:
+            self.refresh_from_db(fields=["state"])
+            raise ValueError(
+                f"Cannot transition to {new_state!r}: job concurrently "
+                f"moved to {self.state!r}"
+            )
         self.state = new_state
-        self.save(update_fields=["state"])
 
     @property
     def job_dir(self) -> Path:
@@ -90,9 +106,19 @@ class AuditJob(models.Model):
         return self.state == self.State.READY
 
     @property
-    def is_running(self) -> bool:
-        # True if any run for this job is currently executing.
-        return self.runs.filter(status=AuditRun.Status.RUNNING).exists()
+    def is_overdue(self) -> bool:
+        """
+        Lazily detect a clone worker that died without running its failure
+        handling (a hard-time-limit SIGKILL or crash skips clone_repo's except
+        block): CLONING past the task's hard time limit plus grace. Checked on
+        read — no beat schedule needed. Remedy: the admin "Mark failed" action.
+        """
+        if self.state != self.State.CLONING:
+            return False
+        deadline = self.created_at + timedelta(
+            seconds=settings.AUDIT_TASK_TIME_LIMIT_SECONDS + OVERDUE_GRACE_SECONDS
+        )
+        return timezone.now() > deadline
 
     def start_run(self, suite):
         """Create and enqueue a run for a READY job."""
@@ -330,26 +356,71 @@ class AuditRun(models.Model):
     class Meta:
         ordering = ["-created_at"]
 
-    def terminate(self, reason: str) -> None:
-        """Mark this run as failed with a reason and record finished_at."""
-        self.status = AuditRun.Status.FAILED
-        self.error = reason
-        self.finished_at = timezone.now()
-        self.save(update_fields=["status", "error", "finished_at"])
+    @property
+    def is_overdue(self) -> bool:
+        """
+        Lazily detect a run whose worker died without running the task's
+        failure handling (hard-time-limit SIGKILL or worker crash skips both
+        except and finally): RUNNING past the suite's hard time limit plus
+        grace. Checked on read — no beat schedule needed. Remedy: the admin
+        "Terminate execution" action.
+        """
+        if self.status != AuditRun.Status.RUNNING or not self.started_at:
+            return False
+        _, hard_limit = self.suite.resolve_task_time_limits()
+        deadline = self.started_at + timedelta(
+            seconds=hard_limit + OVERDUE_GRACE_SECONDS
+        )
+        return timezone.now() > deadline
+
+    def terminate(self, reason: str, *, cost_usd=None) -> bool:
+        """
+        Mark a PENDING/RUNNING run as failed with a reason (optionally recording
+        the measured cost). Compare-and-set: a run that already finished is left
+        untouched (returns False), so an admin terminate racing task completion
+        cannot flip COMPLETED to FAILED.
+        """
+        fields = {
+            "status": AuditRun.Status.FAILED,
+            "error": reason,
+            "finished_at": timezone.now(),
+        }
+        if cost_usd is not None:
+            fields["cost_usd"] = cost_usd
+        updated = AuditRun.objects.filter(
+            pk=self.pk,
+            status__in=[AuditRun.Status.PENDING, AuditRun.Status.RUNNING],
+        ).update(**fields)
+        if updated:
+            self.refresh_from_db(fields=list(fields.keys()))
+        return bool(updated)
 
     def enqueue(self):
-        """Queue this run and persist the created Celery task ID."""
+        """
+        Queue this run once the current transaction commits (immediately under
+        autocommit). Publishing pre-commit lets a fast worker look up the run
+        before its row is visible — the Django admin, for one, saves inside
+        transaction.atomic — and the resulting DoesNotExist permanently
+        strands the run in PENDING.
+        """
         from audit.tasks import execute_audit_run
 
         soft_time_limit, time_limit = self.suite.resolve_task_time_limits()
-        task = execute_audit_run.apply_async(
-            args=[self.pk],
-            soft_time_limit=soft_time_limit,
-            time_limit=time_limit,
-        )
-        self.celery_task_id = task.id or ""
-        self.save(update_fields=["celery_task_id"])
-        return task
+
+        def publish():
+            task = execute_audit_run.apply_async(
+                args=[self.pk],
+                soft_time_limit=soft_time_limit,
+                time_limit=time_limit,
+            )
+            self.celery_task_id = task.id or ""
+            # .update: in eager mode the task has already run by now, so a
+            # full save would clobber its status/finished_at.
+            AuditRun.objects.filter(pk=self.pk).update(
+                celery_task_id=self.celery_task_id
+            )
+
+        transaction.on_commit(publish)
 
     def __str__(self):
         return f"Run #{self.pk} (job #{self.job_id}, {self.suite_id}, {self.status})"
