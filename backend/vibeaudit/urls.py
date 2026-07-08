@@ -15,6 +15,7 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 
+from django.conf import settings
 from django.contrib import admin
 from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 from django.http import Http404
@@ -56,9 +57,11 @@ urlpatterns += staticfiles_urlpatterns()
 
 # SPA fallback for BrowserRouter routes.
 # Keep backend and static asset prefixes out of the fallback.
-urlpatterns += [
-    re_path(
-        r"^(?!(?:api|admin|static)(?:/|$)).*$",
-        SafeTemplateView.as_view(template_name="index.html"),
-    )
-]
+# SERVE_FRONTEND=False runs API-only: just /api and /admin, everything else 404s.
+if settings.SERVE_FRONTEND:
+    urlpatterns += [
+        re_path(
+            r"^(?!(?:api|admin|static)(?:/|$)).*$",
+            SafeTemplateView.as_view(template_name="index.html"),
+        )
+    ]

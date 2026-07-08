@@ -189,17 +189,20 @@ STORAGES = {
 }
 
 
-if DEBUG:
-    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-else:
-    EMAIL_BACKEND = env(
-        "EMAIL_BACKEND", default="anymail.backends.mailgun.EmailBackend"
-    )
-
 ANYMAIL = {
     "MAILGUN_API_KEY": env("MAILGUN_API_KEY", default=""),
     "MAILGUN_SENDER_DOMAIN": env("MAILGUN_SENDER_DOMAIN", default=""),
 }
+
+# 12-factor: with no email config, print emails to the terminal; a configured
+# backend (or Mailgun credentials) selects the real backend regardless of DEBUG.
+_explicit_email_backend = env("EMAIL_BACKEND", default="")
+if _explicit_email_backend:
+    EMAIL_BACKEND = _explicit_email_backend
+elif ANYMAIL["MAILGUN_API_KEY"]:
+    EMAIL_BACKEND = "anymail.backends.mailgun.EmailBackend"
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="webmaster@localhost")
 SITE_URL = env("SITE_URL", default="")
@@ -291,7 +294,11 @@ REPORT_TEMPLATE_PATH = env("REPORT_TEMPLATE_PATH", default="")
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Set "None" per-env for cross-site frontends; default "Lax".
-# With None the CSRF defense is the CORS allowlist alone (AUDIT_ENFORCE_CSRF off).
+# NOTE: CORS does NOT block plain HTML form POSTs. The forgery defense for the
+# anonymous funnel is that its state-changing endpoints accept JSON only
+# (parser_classes = [JSONParser]) — forms can't send application/json, and
+# cross-origin fetch with a JSON body is preflighted and gated by the CORS
+# allowlist. Keep that parser restriction when adding funnel endpoints.
 SESSION_COOKIE_SAMESITE = env.str("SESSION_COOKIE_SAMESITE", default="Lax")
 CSRF_COOKIE_SAMESITE = env.str("CSRF_COOKIE_SAMESITE", default="Lax")
 SESSION_COOKIE_SECURE = env.bool("SESSION_COOKIE_SECURE", default=True)
@@ -305,3 +312,7 @@ CORS_ALLOW_CREDENTIALS = True
 # boundary for the `return_to` carried in the install `state`).
 AUDIT_ALLOWED_RETURN_ORIGINS = env.list("AUDIT_ALLOWED_RETURN_ORIGINS", default=[])
 AUDIT_ENFORCE_CSRF = env.bool("AUDIT_ENFORCE_CSRF", default=False)
+
+# Serve the bundled SPA frontend. Disable for API-only deployments (e.g. when
+# another site embeds the funnel) — only /api and /admin are exposed then.
+SERVE_FRONTEND = env.bool("SERVE_FRONTEND", default=True)

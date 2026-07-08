@@ -87,7 +87,7 @@ GITHUB_APP_PRIVATE_KEY_PATH=secrets/github-app.pem
 GITHUB_APP_SLUG=<your app slug>
 ALLOWED_HOSTS=localhost,127.0.0.1,<NGROK host>
 CSRF_TRUSTED_ORIGINS=<NGROK>
-ALLOW_ANONYMOUS_AUDIT=True
+ALLOW_UNAUTHENTICATED_AUDIT=True
 ```
 
 Add to `frontend/.env`:
