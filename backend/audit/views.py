@@ -1,8 +1,10 @@
 import logging
 
+from django.conf import settings
+from django.db import transaction
 from django.db.models import Count, Q
-from django.shortcuts import get_object_or_404
 from rest_framework.authentication import SessionAuthentication
+from rest_framework.parsers import JSONParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -13,7 +15,10 @@ from audit.models import AuditJob
 from audit.serializers import AuditJobSerializer, StartAuditSerializer
 from audit.tasks import clone_repo
 from github_app.github import InstallationNotFoundError, repo_is_accessible
-from github_app.models import Installation
+from github_app.permissions import (
+    ActiveInstallationPermission,
+    mark_installation_gone,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -26,12 +31,15 @@ class StartAuditView(APIView):
     """
 
     authentication_classes = [AuditAuthentication]
+    permission_classes = [ActiveInstallationPermission]
+    # JSON only: an HTML form can't produce application/json, so cross-site
+    # form POSTs (which CORS does not block) are rejected even though the
+    # anonymous funnel has no CSRF token. Cross-origin fetch with a JSON body
+    # triggers a CORS preflight and is gated by the allowlist.
+    parser_classes = [JSONParser]
 
     def post(self, request):
-        # Check if installation_id is in session
-        installation_id = request.session.get("installation_id")
-        if not installation_id:
-            return Response({"error": "Not authorized"}, status=401)
+        installation = request.installation
 
         # Validate request body
         serializer = StartAuditSerializer(data=request.data)
@@ -42,21 +50,12 @@ class StartAuditView(APIView):
         repo_full_name = serializer.validated_data["repo_full_name"]
         email = serializer.validated_data["email"]
 
-        installation = get_object_or_404(
-            Installation,
-            installation_id=installation_id,
-            remote_deleted_at__isnull=True,
-        )
-
         try:
             repo_allowed = repo_is_accessible(
                 installation.installation_id, repo_full_name
             )
         except InstallationNotFoundError:
-            installation.mark_remote_deleted()
-            return Response(
-                {"error": "Installation no longer exists on GitHub"}, status=401
-            )
+            mark_installation_gone(installation)
         except Exception:
             logger.exception(
                 "Unexpected error checking repo access for %s", repo_full_name
@@ -86,7 +85,17 @@ class StartAuditView(APIView):
             keep_sources=keep_sources,
         )
 
-        clone_repo.delay(audit_job.pk)
+        # Publish after commit so a fast worker can't miss the row. Time limits
+        # bound a hung clone: the soft limit raises inside the task (normal
+        # failure path — staff email, FAILED state); the hard limit is the
+        # backstop Celery kill that AuditJob.is_overdue is calibrated against.
+        transaction.on_commit(
+            lambda: clone_repo.apply_async(
+                args=[audit_job.pk],
+                soft_time_limit=settings.AUDIT_TASK_SOFT_TIME_LIMIT_SECONDS,
+                time_limit=settings.AUDIT_TASK_TIME_LIMIT_SECONDS,
+            )
+        )
 
         job_ids = request.session.get("audit_job_ids", [])
         job_ids.append(audit_job.pk)
@@ -99,19 +108,26 @@ class StartAuditView(APIView):
 
 class AuditSessionView(APIView):
     """
-    GET /api/audit/session — counts of audits submitted by this session.
+    GET /api/audit/session — counts of audits the caller has submitted.
 
-    Derived from session job ids, so it stays accurate after the installation is
-    auto-deleted post-clone (when /api/github/installations 404s).
+    Authenticated users are counted by installation ownership, so their totals
+    survive a new session or device. Anonymous funnel visitors are counted from
+    the job ids recorded on their Django session, which stays accurate after the
+    installation is auto-deleted post-clone (when /api/github/installations 404s).
+    Consumed by the ulam.io website funnel (getAuditSession).
     """
 
     authentication_classes = [AuditAuthentication]
 
     def get(self, request):
-        job_ids = request.session.get("audit_job_ids", [])
+        if request.user.is_authenticated:
+            jobs = AuditJob.objects.filter(installation__owner=request.user)
+        else:
+            job_ids = request.session.get("audit_job_ids", [])
+            jobs = AuditJob.objects.filter(pk__in=job_ids)
         # FAILED jobs count toward submitted too; harmless since failure keeps the
         # install live and the funnel resumes at the picker (no note shown there).
-        counts = AuditJob.objects.filter(pk__in=job_ids).aggregate(
+        counts = jobs.aggregate(
             submitted_count=Count("pk"),
             active_count=Count("pk", filter=Q(state__in=AuditJob.ACTIVE_STATES)),
         )
