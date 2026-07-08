@@ -42,11 +42,13 @@ class InstallationAdmin(ModelAdmin):
         "installation_id",
         "account_login",
         "account_type",
+        "owner",
         "created_at",
         "remote_deleted_at",
     ]
     list_filter = ["account_type"]
-    search_fields = ["account_login", "installation_id"]
+    search_fields = ["account_login", "installation_id", "owner__username"]
+    autocomplete_fields = ["owner"]
     readonly_fields = ["installation_id", "account_login", "account_type", "created_at"]
     actions = [remote_delete_bulk, verify_with_github_bulk]
     actions_detail = ["remote_delete_detail", "verify_with_github_detail"]

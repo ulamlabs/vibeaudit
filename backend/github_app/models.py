@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
@@ -15,6 +16,19 @@ class Installation(models.Model):
     installation_id = models.BigIntegerField(
         unique=True,
         help_text="GitHub's installation ID",
+    )
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="installations",
+        help_text=(
+            "Authenticated user who connected this installation. Their "
+            "installations (and audits) resolve by ownership across sessions "
+            "and devices; anonymous funnel installs have no owner and are "
+            "tracked by session instead."
+        ),
     )
     account_login = models.CharField(
         max_length=255,
@@ -37,10 +51,6 @@ class Installation(models.Model):
 
     def __str__(self):
         return f"Installation #{self.installation_id} ({self.account_login})"
-
-    @property
-    def is_active(self) -> bool:
-        return self.remote_deleted_at is None
 
     def mark_remote_deleted(self) -> None:
         """Mark the installation as no longer existing on GitHub."""

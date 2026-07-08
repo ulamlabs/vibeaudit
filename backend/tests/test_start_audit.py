@@ -88,14 +88,14 @@ def test_repo_not_accessible_returns_400(installation):
 
 
 @pytest.mark.django_db
-def test_installation_gone_on_github_returns_401_and_marks_deleted(installation):
+def test_installation_gone_on_github_returns_404_and_marks_deleted(installation):
     client = client_with_session(installation.installation_id)
     with patch(
         "audit.views.repo_is_accessible",
         side_effect=InstallationNotFoundError(installation.installation_id),
     ):
         response = client.post(START_URL, VALID_PAYLOAD, format="json")
-    assert response.status_code == 401
+    assert response.status_code == 404
     assert response.json() == {"error": "Installation no longer exists on GitHub"}
     installation.refresh_from_db()
     assert installation.remote_deleted_at is not None
