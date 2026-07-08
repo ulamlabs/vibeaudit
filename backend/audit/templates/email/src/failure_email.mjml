@@ -21,7 +21,8 @@
         </mj-text>
         <mj-text>
           <strong>Repository:</strong> {{ repo_name }}<br />
-          <strong>Reference ID:</strong> {{ run_id }}
+          <strong>Reference ID:</strong> {{ run_id }}{% if reason %}<br />
+          <strong>Reason:</strong> {{ reason }}{% endif %}
         </mj-text>
         <mj-text>
           Please contact the administrator and quote the reference ID above so we can investigate.

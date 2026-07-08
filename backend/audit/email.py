@@ -20,6 +20,21 @@ _BUNDLED_EMAIL_DIR = settings.BASE_DIR / "audit" / "templates" / "email"
 _DEFAULT_REPORT_SUBJECT = settings.REPORT_EMAIL_SUBJECT
 _DEFAULT_FAILURE_SUBJECT = "VibeAudit Audit Failed"
 _DEFAULT_SUBMISSION_SUBJECT = "New VibeAudit Submission"
+_DEFAULT_CLONE_FAILURE_SUBJECT = "VibeAudit Clone Failed"
+
+
+def _staff_notification_recipients() -> list[str]:
+    """Emails of is_staff members of the audit_notifications group."""
+    User = get_user_model()
+    return [
+        email
+        for email in User.objects.filter(
+            is_staff=True, groups__name="audit_notifications"
+        )
+        .values_list("email", flat=True)
+        .distinct()
+        if email
+    ]
 
 
 def _load_email_template(filename: str) -> str:
@@ -109,16 +124,7 @@ def send_failure_email(run) -> None:
 
 def send_new_submission_notification(job) -> None:
     """Notify is_staff + audit_notifications group members about a new job awaiting approval."""
-    User = get_user_model()
-    recipients = [
-        email
-        for email in User.objects.filter(
-            is_staff=True, groups__name="audit_notifications"
-        )
-        .values_list("email", flat=True)
-        .distinct()
-        if email
-    ]
+    recipients = _staff_notification_recipients()
     if not recipients:
         return
 
@@ -145,3 +151,41 @@ def send_new_submission_notification(job) -> None:
         _send(msg, html_body)
     except Exception:
         logger.exception("Failed to send staff notification for job %s", job.pk)
+
+
+def send_clone_failure_notification(job, reason: str) -> None:
+    """
+    Notify staff that a job died at the clone stage, reusing the failure email
+    template with the reason filled in (the customer-facing variant omits it).
+    The submitter is an anonymous funnel visitor who can't act on
+    infrastructure failures, so only staff are told and can react.
+    """
+    recipients = _staff_notification_recipients()
+    if not recipients:
+        return
+
+    ctx = Context(
+        {
+            "repo_name": job.repo_full_name,
+            "run_id": f"job-{job.pk}",
+            "reason": reason,
+            "site_url": settings.SITE_URL,
+        }
+    )
+    html_body = Template(_load_email_template("failure_email.html")).render(ctx)
+    plain_body = (
+        f"Cloning failed for audit job #{job.pk} ({job.repo_full_name}), "
+        f"submitted by {job.email}: {reason}. The job is marked failed and "
+        "the submitter has NOT been notified."
+    )
+    msg = EmailMultiAlternatives(
+        subject=_DEFAULT_CLONE_FAILURE_SUBJECT,
+        body=plain_body,
+        to=recipients,
+    )
+    try:
+        _send(msg, html_body)
+    except Exception:
+        logger.exception(
+            "Failed to send clone-failure notification for job %s", job.pk
+        )
