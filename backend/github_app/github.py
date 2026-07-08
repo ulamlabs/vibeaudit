@@ -101,8 +101,8 @@ def list_repos(installation_id: int) -> list[RepoInfo]:
         "X-GitHub-Api-Version": "2022-11-28",
     }
 
-    repositories: list[dict] = []
-    url = "https://api.github.com/installation/repositories"
+    repositories: list = []
+    url: str | None = "https://api.github.com/installation/repositories"
     params: dict | None = {"per_page": 100}
     while url:
         response = requests.get(url, headers=headers, params=params, timeout=30)
