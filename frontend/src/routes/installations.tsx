@@ -52,7 +52,26 @@ function Installations() {
   }
 
   if (loading) return <div className="p-8">Loading…</div>
-  if (!installation) return null
+
+  // Load failed (server error, GitHub outage) — show something actionable
+  // instead of a blank page. The error state below the guard only covers
+  // delete failures once the installation has rendered.
+  if (!installation) {
+    return (
+      <div className="p-8 max-w-lg">
+        <h1 className="text-3xl font-bold">GitHub Installation</h1>
+        <div className="mt-4 rounded border border-red-300 bg-red-50 p-3 text-red-700">
+          {error ?? 'Failed to load installation.'}
+        </div>
+        <a
+          href="/connect"
+          className="mt-4 inline-block rounded bg-gray-900 px-5 py-2.5 text-white hover:bg-gray-700"
+        >
+          Reconnect GitHub
+        </a>
+      </div>
+    )
+  }
 
   return (
     <div className="p-8 max-w-lg">

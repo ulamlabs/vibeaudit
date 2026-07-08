@@ -15,7 +15,7 @@ interface AuditJob {
   id: number
   repo_full_name: string
   email: string
-  status: string
+  state: string
   created_at: string
 }
 
@@ -47,7 +47,8 @@ function RepoPicker() {
         }
       })
       .catch(async (err) => {
-        if (err.response?.status === 401) {
+        // 401: no session installation; 404: installation deleted/gone on GitHub.
+        if (err.response?.status === 401 || err.response?.status === 404) {
           navigate({ to: '/connect' })
         } else {
           setError('Failed to load repositories.')
@@ -103,7 +104,7 @@ function RepoPicker() {
         <p className="mt-4 text-gray-600">
           Job <span className="font-mono font-bold">#{job.id}</span> created for{' '}
           <span className="font-mono">{job.repo_full_name}</span>. Status:{' '}
-          <span className="font-semibold">{job.status}</span>.
+          <span className="font-semibold">{job.state}</span>.
         </p>
         <p className="mt-2 text-gray-600">
           You'll receive the report at <span className="font-semibold">{job.email}</span> when it's
