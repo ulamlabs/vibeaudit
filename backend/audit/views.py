@@ -27,7 +27,8 @@ logger = logging.getLogger(__name__)
 class StartAuditView(APIView):
     """
     Start a new audit job for a repository.
-    Requires installation_id in session.
+    Resolves the installation via ActiveInstallationPermission: the session's
+    installation_id, or (for an authenticated user) their owned installation.
     """
 
     authentication_classes = [AuditAuthentication]

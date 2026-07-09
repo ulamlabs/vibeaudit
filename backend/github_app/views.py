@@ -185,7 +185,8 @@ class InstallationDeleteView(APIView):
 class ReposView(APIView):
     """
     List repositories accessible to the currently installed GitHub App.
-    Requires installation_id in session.
+    Resolves the installation via ActiveInstallationPermission: the session's
+    installation_id, or (for an authenticated user) their owned installation.
     """
 
     authentication_classes = [AuditAuthentication]

@@ -160,30 +160,33 @@ def send_clone_failure_notification(job, reason: str) -> None:
     The submitter is an anonymous funnel visitor who can't act on
     infrastructure failures, so only staff are told and can react.
     """
-    recipients = _staff_notification_recipients()
-    if not recipients:
-        return
-
-    ctx = Context(
-        {
-            "repo_name": job.repo_full_name,
-            "run_id": f"job-{job.pk}",
-            "reason": reason,
-            "site_url": settings.SITE_URL,
-        }
-    )
-    html_body = Template(_load_email_template("failure_email.html")).render(ctx)
-    plain_body = (
-        f"Cloning failed for audit job #{job.pk} ({job.repo_full_name}), "
-        f"submitted by {job.email}: {reason}. The job is marked failed and "
-        "the submitter has NOT been notified."
-    )
-    msg = EmailMultiAlternatives(
-        subject=_DEFAULT_CLONE_FAILURE_SUBJECT,
-        body=plain_body,
-        to=recipients,
-    )
+    # Best-effort throughout: this runs in clone_repo's failure path, so any
+    # error here (recipient lookup, template load/render, or send) must not mask
+    # the original clone exception or block its re-raise.
     try:
+        recipients = _staff_notification_recipients()
+        if not recipients:
+            return
+
+        ctx = Context(
+            {
+                "repo_name": job.repo_full_name,
+                "run_id": f"job-{job.pk}",
+                "reason": reason,
+                "site_url": settings.SITE_URL,
+            }
+        )
+        html_body = Template(_load_email_template("failure_email.html")).render(ctx)
+        plain_body = (
+            f"Cloning failed for audit job #{job.pk} ({job.repo_full_name}), "
+            f"submitted by {job.email}: {reason}. The job is marked failed and "
+            "the submitter has NOT been notified."
+        )
+        msg = EmailMultiAlternatives(
+            subject=_DEFAULT_CLONE_FAILURE_SUBJECT,
+            body=plain_body,
+            to=recipients,
+        )
         _send(msg, html_body)
     except Exception:
         logger.exception(

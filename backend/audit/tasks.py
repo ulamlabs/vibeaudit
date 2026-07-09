@@ -179,14 +179,28 @@ def execute_audit_run(self, run_id: int) -> None:
             reason = (
                 f"Run stopped by guard: orchestrator recursion limit reached. {exc}"
             )
-        run.terminate(reason, cost_usd=_measured_cost(cost_callback))
-        send_failure_email(run)
+        if run.terminate(reason, cost_usd=_measured_cost(cost_callback)):
+            send_failure_email(run)
+        else:
+            # An admin (or other concurrent change) already finished the run;
+            # don't send a duplicate/incorrect failure email. Refresh so the
+            # COMPLETED check below reflects the DB, not stale in-memory status.
+            run.refresh_from_db(fields=["status"])
     except Exception as exc:  # noqa: BLE001
-        run.terminate(str(exc), cost_usd=_measured_cost(cost_callback))
-        send_failure_email(run)
+        if run.terminate(str(exc), cost_usd=_measured_cost(cost_callback)):
+            send_failure_email(run)
+        else:
+            run.refresh_from_db(fields=["status"])
     finally:
         if not job.keep_sources:
-            job.cleanup()
+            # Best-effort: cleanup transitions the job (now compare-and-set) and
+            # can raise if it was closed concurrently. That must not block the
+            # report email below — a retry won't re-send it (the run is no
+            # longer PENDING), so a lost report would be permanent.
+            try:
+                job.cleanup()
+            except Exception:
+                logger.exception("Failed to clean up job %s after run", job.pk)
 
     if run.status == AuditRun.Status.COMPLETED:
         send_report_email(run)
