@@ -73,7 +73,7 @@ def _result():
 def test_execute_audit_run_persists_results_and_outputs(installation, suite):
     job = _ready_job(installation)
     run = AuditRun.objects.create(job=job, suite=suite)
-    with patch("audit.tasks.run_pipeline", return_value=_result()):
+    with patch("audit.ai.runner.run_pipeline", return_value=_result()):
         execute_audit_run(run.pk)
     run.refresh_from_db()
     assert run.status == AuditRun.Status.COMPLETED
@@ -96,7 +96,7 @@ def test_execute_audit_run_records_measured_cost(installation, suite):
         cost_callback.tracked = True
         return _result()
 
-    with patch("audit.tasks.run_pipeline", side_effect=_fake_pipeline):
+    with patch("audit.ai.runner.run_pipeline", side_effect=_fake_pipeline):
         execute_audit_run(run.pk)
     run.refresh_from_db()
     assert run.status == AuditRun.Status.COMPLETED
@@ -113,7 +113,7 @@ def test_execute_audit_run_records_partial_cost_on_failure(installation, suite):
         cost_callback.tracked = True
         raise RuntimeError("boom")
 
-    with patch("audit.tasks.run_pipeline", side_effect=_fail_after_spend):
+    with patch("audit.ai.runner.run_pipeline", side_effect=_fail_after_spend):
         execute_audit_run(run.pk)
     run.refresh_from_db()
     assert run.status == AuditRun.Status.FAILED
@@ -125,7 +125,7 @@ def test_execute_audit_run_leaves_cost_null_when_untracked(installation, suite):
     job = _ready_job(installation)
     run = AuditRun.objects.create(job=job, suite=suite)
     # run_pipeline mock never touches the callback => tracked stays False.
-    with patch("audit.tasks.run_pipeline", return_value=_result()):
+    with patch("audit.ai.runner.run_pipeline", return_value=_result()):
         execute_audit_run(run.pk)
     run.refresh_from_db()
     assert run.cost_usd is None
@@ -135,7 +135,7 @@ def test_execute_audit_run_leaves_cost_null_when_untracked(installation, suite):
 def test_execute_audit_run_marks_failed_on_error(installation, suite):
     job = _ready_job(installation)
     run = AuditRun.objects.create(job=job, suite=suite)
-    with patch("audit.tasks.run_pipeline", side_effect=RuntimeError("boom")):
+    with patch("audit.ai.runner.run_pipeline", side_effect=RuntimeError("boom")):
         execute_audit_run(run.pk)
     run.refresh_from_db()
     assert run.status == AuditRun.Status.FAILED
@@ -146,7 +146,7 @@ def test_execute_audit_run_marks_failed_on_error(installation, suite):
 def test_execute_audit_run_reports_cost_budget_guard(installation, suite):
     job = _ready_job(installation)
     run = AuditRun.objects.create(job=job, suite=suite)
-    with patch("audit.tasks.run_pipeline", side_effect=CostBudgetExceeded(30.0, 25.0)):
+    with patch("audit.ai.runner.run_pipeline", side_effect=CostBudgetExceeded(30.0, 25.0)):
         execute_audit_run(run.pk)
     run.refresh_from_db()
     assert run.status == AuditRun.Status.FAILED
@@ -157,7 +157,7 @@ def test_execute_audit_run_reports_cost_budget_guard(installation, suite):
 def test_execute_audit_run_reports_recursion_guard(installation, suite):
     job = _ready_job(installation)
     run = AuditRun.objects.create(job=job, suite=suite)
-    with patch("audit.tasks.run_pipeline", side_effect=GraphRecursionError("loop")):
+    with patch("audit.ai.runner.run_pipeline", side_effect=GraphRecursionError("loop")):
         execute_audit_run(run.pk)
     run.refresh_from_db()
     assert run.status == AuditRun.Status.FAILED
@@ -169,7 +169,7 @@ def test_execute_audit_run_keeps_sources_by_default(installation, suite):
     job = _ready_job(installation, keep_sources=True)
     run = AuditRun.objects.create(job=job, suite=suite)
     with (
-        patch("audit.tasks.run_pipeline", return_value=_result()),
+        patch("audit.ai.runner.run_pipeline", return_value=_result()),
         patch.object(AuditJob, "cleanup") as cleanup,
     ):
         execute_audit_run(run.pk)
@@ -181,7 +181,7 @@ def test_execute_audit_run_cleans_up_when_not_keeping_sources(installation, suit
     job = _ready_job(installation, keep_sources=False)
     run = AuditRun.objects.create(job=job, suite=suite)
     with (
-        patch("audit.tasks.run_pipeline", return_value=_result()),
+        patch("audit.ai.runner.run_pipeline", return_value=_result()),
         patch.object(AuditJob, "cleanup") as cleanup,
     ):
         execute_audit_run(run.pk)
@@ -193,7 +193,7 @@ def test_report_email_failure_does_not_change_run_status(installation, suite):
     job = _ready_job(installation)
     run = AuditRun.objects.create(job=job, suite=suite)
     with (
-        patch("audit.tasks.run_pipeline", return_value=_result()),
+        patch("audit.ai.runner.run_pipeline", return_value=_result()),
         patch("audit.email._send", side_effect=Exception("smtp down")),
     ):
         execute_audit_run(run.pk)
@@ -207,7 +207,7 @@ def test_execute_audit_run_fails_when_model_not_in_whitelist(installation):
     job = _ready_job(installation)
     run = AuditRun.objects.create(job=job, suite=suite)
     with (
-        patch("audit.tasks.run_pipeline") as mock_pipeline,
+        patch("audit.ai.runner.run_pipeline") as mock_pipeline,
         override_settings(AVAILABLE_AI_MODELS=["claude-sonnet-4-6"]),
     ):
         execute_audit_run(run.pk)

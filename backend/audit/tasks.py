@@ -1,16 +1,15 @@
+from __future__ import annotations
+
 import logging
 import shutil
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 import git
 from celery import shared_task
 from django.conf import settings
 from django.utils import timezone
-from langgraph.errors import GraphRecursionError
 
-from audit.ai.budget import CostBudgetCallback, CostBudgetExceeded
-from audit.ai.runner import run_pipeline
-from audit.ai.suites import suite_to_agent_definitions
 from audit.email import (
     send_clone_failure_notification,
     send_failure_email,
@@ -19,6 +18,13 @@ from audit.email import (
 )
 from audit.models import AgentRunOutput, AuditJob, AuditRun
 from github_app.github import get_installation_token
+
+# Type-checker only: resolves the CostBudgetCallback annotation below without
+# importing the heavy AI stack at module load. `from __future__ import
+# annotations` keeps the annotation a string at runtime, so no real import is
+# needed here — the actual import lives inside execute_audit_run (worker-only).
+if TYPE_CHECKING:
+    from audit.ai.budget import CostBudgetCallback
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +94,15 @@ def cleanup_job_dir(job_id: int) -> None:
 
 @shared_task(bind=True)
 def execute_audit_run(self, run_id: int) -> None:
+    # Imported lazily (not at module top) so the heavy AI stack — litellm,
+    # langchain, langgraph, deepagents — loads only in the Celery worker that
+    # runs this task, never in the web/gunicorn process that merely enqueues it.
+    from langgraph.errors import GraphRecursionError
+
+    from audit.ai.budget import CostBudgetCallback, CostBudgetExceeded
+    from audit.ai.runner import run_pipeline
+    from audit.ai.suites import suite_to_agent_definitions
+
     # Atomically claim the run (PENDING → RUNNING). A redelivered message or a
     # duplicate enqueue finds it already claimed/finished and skips, so a
     # completed run is never re-executed (and never re-emailed).

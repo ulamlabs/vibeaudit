@@ -103,6 +103,12 @@ IMAGE_REPO=ghcr.io/ulamlabs/vibeaudit IMAGE_TAG=main just build
 just run   # runs the production image on port 8080
 ```
 
+### Runtime tuning (env)
+
+- **`LITELLM_LOCAL_MODEL_COST_MAP`** — `True` makes litellm use its bundled model-cost snapshot instead of fetching it from GitHub on import. The fetch is safe by default (httpx 5s timeout, then falls back to the bundled map — it never hangs), so leave it unset. Only set `True` on egress-restricted hosts to skip the network attempt entirely.
+- **`WEB_CONCURRENCY`** (default 2) / **`GUNICORN_THREADS`** (default 4) — gunicorn worker processes and threads per worker (the `web` command runs with `--preload`).
+- **`CELERY_CONCURRENCY`** (default 2) / **`CELERY_LOGLEVEL`** (default info) — Celery prefork children and log level (the `worker` command). Each child imports the AI stack, so this bounds worker memory and avoids over-forking to host-CPU-count on a CPU-limited host.
+
 ### Sentry (optional)
 
 - **Backend** — set `BACKEND_SENTRY_DSN` in the runtime environment.
