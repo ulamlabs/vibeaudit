@@ -74,6 +74,4 @@ def mark_installation_gone(installation: Installation) -> NoReturn:
     raise the canonical 404 for it.
     """
     installation.mark_remote_deleted()
-    raise InstallationGoneError(
-        {"error": "Installation no longer exists on GitHub"}
-    )
+    raise InstallationGoneError({"error": "Installation no longer exists on GitHub"})

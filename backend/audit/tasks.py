@@ -106,9 +106,9 @@ def execute_audit_run(self, run_id: int) -> None:
     # Atomically claim the run (PENDING → RUNNING). A redelivered message or a
     # duplicate enqueue finds it already claimed/finished and skips, so a
     # completed run is never re-executed (and never re-emailed).
-    claimed = AuditRun.objects.filter(
-        pk=run_id, status=AuditRun.Status.PENDING
-    ).update(status=AuditRun.Status.RUNNING, started_at=timezone.now())
+    claimed = AuditRun.objects.filter(pk=run_id, status=AuditRun.Status.PENDING).update(
+        status=AuditRun.Status.RUNNING, started_at=timezone.now()
+    )
     if not claimed:
         logger.warning(
             "Run %s is not PENDING (duplicate delivery or already terminated); "

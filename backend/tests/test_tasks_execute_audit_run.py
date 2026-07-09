@@ -146,7 +146,9 @@ def test_execute_audit_run_marks_failed_on_error(installation, suite):
 def test_execute_audit_run_reports_cost_budget_guard(installation, suite):
     job = _ready_job(installation)
     run = AuditRun.objects.create(job=job, suite=suite)
-    with patch("audit.ai.runner.run_pipeline", side_effect=CostBudgetExceeded(30.0, 25.0)):
+    with patch(
+        "audit.ai.runner.run_pipeline", side_effect=CostBudgetExceeded(30.0, 25.0)
+    ):
         execute_audit_run(run.pk)
     run.refresh_from_db()
     assert run.status == AuditRun.Status.FAILED

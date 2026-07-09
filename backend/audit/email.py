@@ -189,6 +189,4 @@ def send_clone_failure_notification(job, reason: str) -> None:
         )
         _send(msg, html_body)
     except Exception:
-        logger.exception(
-            "Failed to send clone-failure notification for job %s", job.pk
-        )
+        logger.exception("Failed to send clone-failure notification for job %s", job.pk)
