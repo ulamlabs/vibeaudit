@@ -22,6 +22,10 @@ from github_app.github import (
     list_repos,
 )
 from github_app.models import Installation
+from github_app.permissions import (
+    ActiveInstallationPermission,
+    mark_installation_gone,
+)
 from github_app.return_to import build_state, parse_state, is_allowed_return_to
 from github_app.serializers import InstallationSerializer, RepoSerializer
 
@@ -99,6 +103,13 @@ def setup(request: HttpRequest) -> HttpResponse:
             account_type=info.account_type,
         )
 
+    # An authenticated user owns the installations they connect, so we can
+    # resolve them by ownership on any later session or device. Anonymous funnel
+    # visitors have no owner and stay session-tracked (below).
+    if request.user.is_authenticated and installation.owner_id != request.user.pk:
+        installation.owner = request.user
+        installation.save(update_fields=["owner"])
+
     request.session["installation_id"] = installation_id_int
 
     # Consume the one-time nonce.
@@ -118,28 +129,16 @@ class InstallationsView(APIView):
     """
 
     authentication_classes = [AuditAuthentication]
+    permission_classes = [ActiveInstallationPermission]
 
     def get(self, request):
-        installation_id = request.session.get("installation_id")
-        if not installation_id:
-            return Response({"error": "Not authorized"}, status=401)
-
-        try:
-            installation = Installation.objects.get(
-                installation_id=installation_id,
-                remote_deleted_at__isnull=True,
-            )
-        except Installation.DoesNotExist:
-            return Response({"error": "Installation not found"}, status=404)
+        installation = request.installation
 
         # Lazy verification against GitHub.
         try:
-            check_installation_active(installation_id)
+            check_installation_active(installation.installation_id)
         except InstallationNotFoundError:
-            installation.mark_remote_deleted()
-            return Response(
-                {"error": "Installation no longer exists on GitHub"}, status=404
-            )
+            mark_installation_gone(installation)
         except Exception:
             # Network errors etc. — don't penalise the user; treat as still active.
             pass
@@ -158,19 +157,12 @@ class InstallationDeleteView(APIView):
     """
 
     authentication_classes = [AuditAuthentication]
+    permission_classes = [ActiveInstallationPermission]
 
     def delete(self, request, installation_id: int):
-        session_installation_id = request.session.get("installation_id")
-        if not session_installation_id:
-            return Response({"error": "Not authorized"}, status=401)
-
-        if session_installation_id != installation_id:
+        installation = request.installation
+        if installation.installation_id != installation_id:
             return Response({"error": "Forbidden"}, status=403)
-
-        try:
-            installation = Installation.objects.get(installation_id=installation_id)
-        except Installation.DoesNotExist:
-            return Response({"error": "Installation not found"}, status=404)
 
         # Block if active jobs are in progress.
         if installation.has_active_audit_jobs():
@@ -193,34 +185,22 @@ class InstallationDeleteView(APIView):
 class ReposView(APIView):
     """
     List repositories accessible to the currently installed GitHub App.
-    Requires installation_id in session.
+    Resolves the installation via ActiveInstallationPermission: the session's
+    installation_id, or (for an authenticated user) their owned installation.
     """
 
     authentication_classes = [AuditAuthentication]
+    permission_classes = [ActiveInstallationPermission]
 
     def get(self, request):
-        installation_id = request.session.get("installation_id")
-        if not installation_id:
-            return Response({"error": "Not authorized"}, status=401)
+        installation = request.installation
 
         try:
-            installation = Installation.objects.get(
-                installation_id=installation_id, remote_deleted_at__isnull=True
-            )
-        except Installation.DoesNotExist:
-            return Response(
-                {"error": "Installation not found or has been deleted"}, status=401
-            )
-
-        try:
-            repos = list_repos(installation_id)
+            repos = list_repos(installation.installation_id)
             serializer = RepoSerializer(repos, many=True)
             return Response({"repos": serializer.data})
         except InstallationNotFoundError:
-            installation.mark_remote_deleted()
-            return Response(
-                {"error": "Installation no longer exists on GitHub"}, status=401
-            )
+            mark_installation_gone(installation)
         except Exception:
             return Response(
                 {"error": "Failed to load repositories. Please try again."}, status=503

@@ -61,12 +61,18 @@ def test_invalid_transition_raises(installation):
 
 
 @pytest.mark.django_db
-def test_approve_moves_to_ready_and_starts_run(installation, default_suite):
+def test_approve_moves_to_ready_and_starts_run(
+    installation, default_suite, django_capture_on_commit_callbacks
+):
     job = _job(installation, AuditJob.State.AWAITING_APPROVAL)
     task = type("Task", (), {"id": "task-1"})()
-    with patch(
-        "audit.tasks.execute_audit_run.apply_async", return_value=task
-    ) as apply_async:
+    with (
+        patch(
+            "audit.tasks.execute_audit_run.apply_async", return_value=task
+        ) as apply_async,
+        # enqueue() publishes on transaction commit
+        django_capture_on_commit_callbacks(execute=True),
+    ):
         job.approve()
     job.refresh_from_db()
     assert job.state == AuditJob.State.READY
@@ -90,7 +96,9 @@ def test_start_run_requires_ready(installation, default_suite):
 
 
 @pytest.mark.django_db
-def test_start_run_applies_suite_timeout_overrides(installation, default_suite):
+def test_start_run_applies_suite_timeout_overrides(
+    installation, default_suite, django_capture_on_commit_callbacks
+):
     job = _job(installation, AuditJob.State.READY)
     default_suite.task_soft_time_limit_seconds = 123
     default_suite.task_time_limit_seconds = 456
@@ -99,9 +107,13 @@ def test_start_run_applies_suite_timeout_overrides(installation, default_suite):
     )
 
     task = type("Task", (), {"id": "task-2"})()
-    with patch(
-        "audit.tasks.execute_audit_run.apply_async", return_value=task
-    ) as apply_async:
+    with (
+        patch(
+            "audit.tasks.execute_audit_run.apply_async", return_value=task
+        ) as apply_async,
+        # enqueue() publishes on transaction commit
+        django_capture_on_commit_callbacks(execute=True),
+    ):
         run = job.start_run(default_suite)
 
     run.refresh_from_db()

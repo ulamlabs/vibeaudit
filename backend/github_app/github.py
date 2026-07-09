@@ -71,14 +71,7 @@ def check_installation_active(installation_id: int) -> None:
     Raises InstallationNotFoundError if GitHub returns 404.
     No database side effects — the caller is responsible for updating remote_deleted_at.
     """
-    response = requests.get(
-        f"https://api.github.com/app/installations/{installation_id}",
-        headers=_app_api_headers(),
-        timeout=30,
-    )
-    if response.status_code == 404:
-        raise InstallationNotFoundError(installation_id)
-    response.raise_for_status()
+    get_installation_info(installation_id)
 
 
 def get_installation_token(installation_id: int) -> str:
@@ -98,20 +91,25 @@ def get_installation_token(installation_id: int) -> str:
 
 def list_repos(installation_id: int) -> list[RepoInfo]:
     """
-    List all repositories accessible to the given installation.
+    List all repositories accessible to the given installation, following
+    GitHub's Link-header pagination (the API returns at most 100 per page).
     """
     token = get_installation_token(installation_id)
-    response = requests.get(
-        "https://api.github.com/installation/repositories",
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-        timeout=30,
-    )
-    response.raise_for_status()
-    repositories = response.json().get("repositories", [])
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+    repositories: list = []
+    url: str | None = "https://api.github.com/installation/repositories"
+    params: dict | None = {"per_page": 100}
+    while url:
+        response = requests.get(url, headers=headers, params=params, timeout=30)
+        response.raise_for_status()
+        repositories.extend(response.json().get("repositories", []))
+        url = response.links.get("next", {}).get("url")
+        params = None  # the `next` URL already carries the paging params
 
     return [
         RepoInfo(

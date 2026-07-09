@@ -14,9 +14,6 @@ from unfold.admin import ModelAdmin, TabularInline
 from unfold.decorators import action
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 
-from audit.ai.prompts import DEFAULT_REPORT_INSTRUCTIONS
-from audit.ai.runner import _build_orchestrator_system_prompt
-from audit.ai.suites import suite_to_agent_definitions
 from audit.models import AgentRunOutput, AuditAgent, AuditJob, AuditRun, AuditSuite
 from audit.pdf import render_pdf
 from audit.rendering import render_markdown_safe
@@ -92,7 +89,6 @@ class AuditSuiteAdmin(ModelAdmin):
     list_filter = ["is_default"]
     search_fields = ["name", "description"]
     filter_horizontal = ("agents",)
-    readonly_fields = ["effective_orchestrator_prompt"]
 
     _EMAIL_HELP = (
         "<strong>Available template variables:</strong> "
@@ -120,24 +116,6 @@ class AuditSuiteAdmin(ModelAdmin):
     def agent_count(self, obj):
         return obj.agents.count()
 
-    @admin.display(description="Orchestrator prompts (system + report instructions)")
-    def effective_orchestrator_prompt(self, obj):
-        system = _build_orchestrator_system_prompt(suite_to_agent_definitions(obj))
-        report = obj.orchestrator_prompt or DEFAULT_REPORT_INSTRUCTIONS
-        pre = (
-            'style="white-space: pre-wrap; word-break: break-word; '
-            'font-size: 0.85em; max-height: 300px; overflow-y: auto"'
-        )
-        return format_html(
-            "<strong>System prompt (framework-owned):</strong><br>"
-            "<pre {pre}>{system}</pre>"
-            "<strong>Report instructions (user prompt):</strong><br>"
-            "<pre {pre}>{report}</pre>",
-            pre=mark_safe(pre),
-            system=system,
-            report=report,
-        )
-
 
 class AgentRunOutputInline(TabularInline):
     model = AgentRunOutput
@@ -161,7 +139,15 @@ class AgentRunOutputInline(TabularInline):
 @admin.register(AuditRun)
 class AuditRunAdmin(ModelAdmin):
     form = AuditRunForm
-    list_display = ["id", "job", "suite", "status", "cost_usd", "created_at"]
+    list_display = [
+        "id",
+        "job",
+        "suite",
+        "status",
+        "needs_attention",
+        "cost_usd",
+        "created_at",
+    ]
     list_filter = ["status", "suite", "job"]
     search_fields = ["job__repo_full_name"]
     inlines = [AgentRunOutputInline]
@@ -209,6 +195,12 @@ class AuditRunAdmin(ModelAdmin):
             "finished_at",
         ]
 
+    @admin.display(description="Needs attention", boolean=True)
+    def needs_attention(self, obj):
+        # RUNNING past the hard time limit — the worker likely died; use
+        # "Terminate execution" to fail the run and unstick the job.
+        return obj.is_overdue
+
     @admin.display(description="Report")
     def report_html(self, obj):
         return _rendered_markdown(obj.markdown)
@@ -243,8 +235,16 @@ class AuditRunAdmin(ModelAdmin):
             )
         else:
             current_app.control.revoke(run.celery_task_id, terminate=True)
-            run.terminate("Terminated by admin user")
-            self.message_user(request, f"Run #{run.pk} terminated.")
+            if run.terminate("Terminated by admin user"):
+                self.message_user(request, f"Run #{run.pk} terminated.")
+            else:
+                run.refresh_from_db(fields=["status"])
+                self.message_user(
+                    request,
+                    f"Run #{run.pk} finished as {run.status} before it could be "
+                    "terminated; left unchanged.",
+                    messages.WARNING,
+                )
         return redirect(reverse("admin:audit_auditrun_change", args=[object_id]))
 
 
@@ -255,6 +255,7 @@ class AuditJobAdmin(ModelAdmin):
         "repo_full_name",
         "email",
         "state",
+        "needs_attention",
         "keep_sources",
         "installation",
         "created_at",
@@ -282,7 +283,13 @@ class AuditJobAdmin(ModelAdmin):
     ]
     ordering = ["-created_at"]
     actions = ["bulk_cleanup"]
-    actions_detail = ["approve_job", "reject_job", "cleanup_job"]
+    actions_detail = ["approve_job", "reject_job", "mark_failed", "cleanup_job"]
+
+    @admin.display(description="Needs attention", boolean=True)
+    def needs_attention(self, obj):
+        # CLONING past the task hard time limit — the clone worker likely
+        # died; use "Mark failed" to unstick the job (and the installation).
+        return obj.is_overdue
 
     @action(description="Approve", url_path="approve")
     def approve_job(self, request, object_id):
@@ -306,6 +313,21 @@ class AuditJobAdmin(ModelAdmin):
             self.message_user(request, f"Job #{job.pk} rejected.", messages.WARNING)
         return self._redirect_to_change(request, object_id)
 
+    @action(description="Mark failed", url_path="mark-failed")
+    def mark_failed(self, request, object_id):
+        """Unstick a job whose clone worker died (stuck CLONING)."""
+        job = AuditJob.objects.get(pk=object_id)
+        try:
+            job.transition_to(AuditJob.State.FAILED)
+        except ValueError as e:
+            self.message_user(request, str(e), messages.ERROR)
+        else:
+            job.delete_clone()
+            self.message_user(
+                request, f"Job #{job.pk} marked failed.", messages.WARNING
+            )
+        return self._redirect_to_change(request, object_id)
+
     @action(description="Delete sources", url_path="cleanup")
     def cleanup_job(self, request, object_id):
         job = AuditJob.objects.get(pk=object_id)
@@ -324,10 +346,14 @@ class AuditJobAdmin(ModelAdmin):
                 messages.WARNING,
             )
 
-        job.cleanup()
-        self.message_user(
-            request, f"Sources deleted for job #{job.pk}.", messages.WARNING
-        )
+        try:
+            job.cleanup()
+        except ValueError as e:
+            self.message_user(request, str(e), messages.ERROR)
+        else:
+            self.message_user(
+                request, f"Sources deleted for job #{job.pk}.", messages.WARNING
+            )
         return self._redirect_to_change(request, object_id)
 
     @admin.action(description="Delete sources for selected jobs")
