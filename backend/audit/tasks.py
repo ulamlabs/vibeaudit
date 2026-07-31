@@ -206,3 +206,30 @@ def execute_audit_run(self, run_id: int) -> None:
     # send_approved_report, once nothing needs the clone.
     if run.status == AuditRun.Status.COMPLETED:
         send_report_approval_notification(run)
+
+
+@shared_task
+def send_approved_report(run_id: int) -> None:
+    """
+    Deliver an approved report, then release the job's clone. A send failure
+    leaves report_state at 'approved' so the admin's Resend action can retry —
+    marking it 'sent' on a failure would claim a delivery that never happened.
+    """
+    run = AuditRun.objects.select_related("job", "suite").get(pk=run_id)
+    if run.report_state != AuditRun.ReportState.APPROVED:
+        logger.warning(
+            "Run %s report_state is %r, not 'approved' (duplicate delivery or "
+            "already sent); skipping send.",
+            run_id,
+            run.report_state,
+        )
+        return
+
+    try:
+        send_report_email(run)
+    except Exception:
+        logger.exception("Failed to send approved report for run %s", run_id)
+        return
+
+    run.transition_report_to(AuditRun.ReportState.SENT)
+    AuditJob.maybe_cleanup_sources(run.job_id)

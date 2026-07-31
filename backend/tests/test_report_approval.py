@@ -144,3 +144,80 @@ def test_send_failure_email_is_gone():
     import audit.email
 
     assert not hasattr(audit.email, "send_failure_email")
+
+
+from audit.tasks import send_approved_report
+
+
+def _approved_run(installation, suite):
+    run = _completed_run(installation, suite, markdown="# Report")
+    AuditRun.objects.filter(pk=run.pk).update(
+        report_state=AuditRun.ReportState.APPROVED
+    )
+    run.refresh_from_db()
+    return run
+
+
+@pytest.mark.django_db
+def test_send_approved_report_sends_marks_sent_and_cleans_up(installation, suite):
+    run = _approved_run(installation, suite)
+    with (
+        patch("audit.tasks.send_report_email") as send,
+        patch("audit.models.AuditJob.maybe_cleanup_sources") as cleanup,
+    ):
+        send_approved_report(run.pk)
+    send.assert_called_once()
+    cleanup.assert_called_once_with(run.job_id)
+    run.refresh_from_db()
+    assert run.report_state == AuditRun.ReportState.SENT
+
+
+@pytest.mark.django_db
+def test_send_failure_leaves_report_approved(installation, suite):
+    """A failed send must stay retryable via the admin's Resend action."""
+    run = _approved_run(installation, suite)
+    with (
+        patch("audit.tasks.send_report_email", side_effect=Exception("smtp down")),
+        patch("audit.models.AuditJob.maybe_cleanup_sources") as cleanup,
+    ):
+        send_approved_report(run.pk)
+    cleanup.assert_not_called()
+    run.refresh_from_db()
+    assert run.report_state == AuditRun.ReportState.APPROVED
+
+
+@pytest.mark.django_db
+def test_send_approved_report_skips_runs_not_approved(installation, suite):
+    """A redelivered message must not re-send an already-sent report."""
+    run = _completed_run(installation, suite)
+    AuditRun.objects.filter(pk=run.pk).update(report_state=AuditRun.ReportState.SENT)
+    with patch("audit.tasks.send_report_email") as send:
+        send_approved_report(run.pk)
+    send.assert_not_called()
+
+
+@pytest.mark.django_db
+def test_send_approved_report_closes_the_job(installation, suite):
+    """End to end: the last report sent releases the clone."""
+    run = _approved_run(installation, suite)
+    with patch("audit.tasks.send_report_email"):
+        send_approved_report(run.pk)
+    run.job.refresh_from_db()
+    assert run.job.state == AuditJob.State.CLOSED
+
+
+@pytest.mark.django_db
+def test_send_approved_report_keeps_job_open_while_another_awaits(
+    installation, suite
+):
+    run = _approved_run(installation, suite)
+    other = AuditRun.objects.create(
+        job=run.job, suite=suite, status=AuditRun.Status.COMPLETED
+    )
+    AuditRun.objects.filter(pk=other.pk).update(
+        report_state=AuditRun.ReportState.AWAITING_APPROVAL
+    )
+    with patch("audit.tasks.send_report_email"):
+        send_approved_report(run.pk)
+    run.job.refresh_from_db()
+    assert run.job.state == AuditJob.State.READY
