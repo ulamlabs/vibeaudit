@@ -12,9 +12,10 @@ from django.utils import timezone
 
 from audit.email import (
     send_clone_failure_notification,
-    send_failure_email,
     send_new_submission_notification,
+    send_report_approval_notification,
     send_report_email,
+    send_run_failure_notification,
 )
 from audit.models import AgentRunOutput, AuditJob, AuditRun
 from github_app.github import get_installation_token
@@ -151,11 +152,19 @@ def execute_audit_run(self, run_id: int) -> None:
             summary=report.summary,
             markdown=report.markdown,
             status=AuditRun.Status.COMPLETED,
+            report_state=AuditRun.ReportState.AWAITING_APPROVAL,
             cost_usd=_measured_cost(cost_callback),
             finished_at=timezone.now(),
         )
         run.refresh_from_db(
-            fields=["summary", "markdown", "status", "cost_usd", "finished_at"]
+            fields=[
+                "summary",
+                "markdown",
+                "status",
+                "report_state",
+                "cost_usd",
+                "finished_at",
+            ]
         )
 
         AgentRunOutput.objects.bulk_create(
@@ -180,7 +189,7 @@ def execute_audit_run(self, run_id: int) -> None:
                 f"Run stopped by guard: orchestrator recursion limit reached. {exc}"
             )
         if run.terminate(reason, cost_usd=_measured_cost(cost_callback)):
-            send_failure_email(run)
+            send_run_failure_notification(run)
         else:
             # An admin (or other concurrent change) already finished the run;
             # don't send a duplicate/incorrect failure email. Refresh so the
@@ -188,19 +197,12 @@ def execute_audit_run(self, run_id: int) -> None:
             run.refresh_from_db(fields=["status"])
     except Exception as exc:  # noqa: BLE001
         if run.terminate(str(exc), cost_usd=_measured_cost(cost_callback)):
-            send_failure_email(run)
+            send_run_failure_notification(run)
         else:
             run.refresh_from_db(fields=["status"])
-    finally:
-        if not job.keep_sources:
-            # Best-effort: cleanup transitions the job (now compare-and-set) and
-            # can raise if it was closed concurrently. That must not block the
-            # report email below — a retry won't re-send it (the run is no
-            # longer PENDING), so a lost report would be permanent.
-            try:
-                job.cleanup()
-            except Exception:
-                logger.exception("Failed to clean up job %s after run", job.pk)
 
+    # The clone stays on disk and the job stays READY: a report can still be
+    # rejected and the job re-run with another suite. Cleanup happens in
+    # send_approved_report, once nothing needs the clone.
     if run.status == AuditRun.Status.COMPLETED:
-        send_report_email(run)
+        send_report_approval_notification(run)

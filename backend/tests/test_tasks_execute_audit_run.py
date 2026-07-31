@@ -17,8 +17,8 @@ from github_app.models import Installation
 def stub_email_sending():
     """Email sending is a side-effect tested separately; stub it out here."""
     with (
-        patch("audit.tasks.send_report_email"),
-        patch("audit.tasks.send_failure_email"),
+        patch("audit.tasks.send_report_approval_notification"),
+        patch("audit.tasks.send_run_failure_notification"),
     ):
         yield
 
@@ -167,8 +167,10 @@ def test_execute_audit_run_reports_recursion_guard(installation, suite):
 
 
 @pytest.mark.django_db
-def test_execute_audit_run_keeps_sources_by_default(installation, suite):
-    job = _ready_job(installation, keep_sources=True)
+@pytest.mark.parametrize("keep_sources", [True, False])
+def test_execute_audit_run_never_cleans_up_sources(installation, suite, keep_sources):
+    """Cleanup moved to report approval — the clone must survive the run itself."""
+    job = _ready_job(installation, keep_sources=keep_sources)
     run = AuditRun.objects.create(job=job, suite=suite)
     with (
         patch("audit.ai.runner.run_pipeline", return_value=_result()),
@@ -176,31 +178,48 @@ def test_execute_audit_run_keeps_sources_by_default(installation, suite):
     ):
         execute_audit_run(run.pk)
     cleanup.assert_not_called()
+    job.refresh_from_db()
+    assert job.state == AuditJob.State.READY
 
 
 @pytest.mark.django_db
-def test_execute_audit_run_cleans_up_when_not_keeping_sources(installation, suite):
-    job = _ready_job(installation, keep_sources=False)
+def test_completed_run_parks_report_awaiting_approval(installation, suite):
+    job = _ready_job(installation)
     run = AuditRun.objects.create(job=job, suite=suite)
-    with (
-        patch("audit.ai.runner.run_pipeline", return_value=_result()),
-        patch.object(AuditJob, "cleanup") as cleanup,
-    ):
+    with patch("audit.ai.runner.run_pipeline", return_value=_result()):
         execute_audit_run(run.pk)
-    cleanup.assert_called_once()
+    run.refresh_from_db()
+    assert run.status == AuditRun.Status.COMPLETED
+    assert run.report_state == AuditRun.ReportState.AWAITING_APPROVAL
 
 
 @pytest.mark.django_db
-def test_report_email_failure_does_not_change_run_status(installation, suite):
+def test_completed_run_notifies_staff_not_submitter(installation, suite):
     job = _ready_job(installation)
     run = AuditRun.objects.create(job=job, suite=suite)
     with (
         patch("audit.ai.runner.run_pipeline", return_value=_result()),
-        patch("audit.email._send", side_effect=Exception("smtp down")),
+        patch("audit.tasks.send_report_approval_notification") as notify,
+        patch("audit.email.send_report_email") as send_report,
     ):
         execute_audit_run(run.pk)
+    notify.assert_called_once()
+    send_report.assert_not_called()
+
+
+@pytest.mark.django_db
+def test_failed_run_notifies_staff_and_leaves_report_state_blank(installation, suite):
+    job = _ready_job(installation)
+    run = AuditRun.objects.create(job=job, suite=suite)
+    with (
+        patch("audit.ai.runner.run_pipeline", side_effect=RuntimeError("boom")),
+        patch("audit.tasks.send_run_failure_notification") as notify,
+    ):
+        execute_audit_run(run.pk)
+    notify.assert_called_once()
     run.refresh_from_db()
-    assert run.status == AuditRun.Status.COMPLETED
+    assert run.status == AuditRun.Status.FAILED
+    assert run.report_state == ""
 
 
 @pytest.mark.django_db
