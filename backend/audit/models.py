@@ -326,6 +326,18 @@ class AuditRun(models.Model):
         COMPLETED = "completed", "Completed"
         FAILED = "failed", "Failed"
 
+    class ReportState(models.TextChoices):
+        AWAITING_APPROVAL = "awaiting_approval", "Awaiting Approval"
+        APPROVED = "approved", "Approved"
+        SENT = "sent", "Sent"
+        REJECTED = "rejected", "Rejected"
+
+    # Blank (the default) means "no report stage" — a run that has not completed.
+    REPORT_VALID_TRANSITIONS: dict[str, list[str]] = {
+        ReportState.AWAITING_APPROVAL: [ReportState.APPROVED, ReportState.REJECTED],
+        ReportState.APPROVED: [ReportState.SENT],
+    }
+
     job = models.ForeignKey(AuditJob, related_name="runs", on_delete=models.CASCADE)
     suite = models.ForeignKey(AuditSuite, on_delete=models.PROTECT)
     status = models.CharField(
@@ -348,6 +360,17 @@ class AuditRun(models.Model):
     )
     celery_task_id = models.CharField(
         max_length=36, blank=True, help_text="Celery task ID for tracking/revoking."
+    )
+    report_state = models.CharField(
+        max_length=32,
+        choices=ReportState.choices,
+        blank=True,
+        default="",
+        help_text=(
+            "Delivery stage of this run's report. Blank until the run completes; "
+            "a completed report waits at 'awaiting_approval' until a staff member "
+            "approves or rejects it."
+        ),
     )
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True)
@@ -394,6 +417,31 @@ class AuditRun(models.Model):
         if updated:
             self.refresh_from_db(fields=list(fields.keys()))
         return bool(updated)
+
+    def transition_report_to(self, new_state: str) -> None:
+        allowed = self.REPORT_VALID_TRANSITIONS.get(self.report_state, [])
+        if new_state not in allowed:
+            raise ValueError(
+                f"Cannot transition report from {self.report_state!r} to {new_state!r}"
+            )
+        # Compare-and-set, like AuditJob.transition_to: a double-clicked Approve
+        # cannot pass the guard twice.
+        updated = AuditRun.objects.filter(
+            pk=self.pk, report_state=self.report_state
+        ).update(report_state=new_state)
+        if not updated:
+            self.refresh_from_db(fields=["report_state"])
+            raise ValueError(
+                f"Cannot transition report to {new_state!r}: run concurrently "
+                f"moved to {self.report_state!r}"
+            )
+        self.report_state = new_state
+
+    def enqueue_send(self):
+        """Queue the approved report for delivery once the current transaction commits."""
+        from audit.tasks import send_approved_report
+
+        transaction.on_commit(lambda: send_approved_report.delay(self.pk))
 
     def enqueue(self):
         """

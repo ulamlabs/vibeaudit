@@ -261,3 +261,59 @@ def test_email_template_invalid_syntax_raises(field):
 def test_email_template_only_repo_name_valid():
     suite = _suite(email_html_body="Your report for {{ repo_name }} is ready.")
     suite.full_clean()  # should not raise
+
+
+def _run(installation, default_suite, report_state=""):
+    job = AuditJob.objects.create(
+        installation=installation, repo_full_name="o/r", email="a@b.c"
+    )
+    run = AuditRun.objects.create(job=job, suite=default_suite)
+    if report_state:
+        AuditRun.objects.filter(pk=run.pk).update(report_state=report_state)
+        run.refresh_from_db(fields=["report_state"])
+    return run
+
+
+@pytest.mark.django_db
+def test_report_state_defaults_blank(installation, default_suite):
+    assert _run(installation, default_suite).report_state == ""
+
+
+@pytest.mark.django_db
+def test_report_awaiting_can_be_approved(installation, default_suite):
+    run = _run(installation, default_suite, AuditRun.ReportState.AWAITING_APPROVAL)
+    run.transition_report_to(AuditRun.ReportState.APPROVED)
+    run.refresh_from_db()
+    assert run.report_state == AuditRun.ReportState.APPROVED
+
+
+@pytest.mark.django_db
+def test_report_awaiting_can_be_rejected(installation, default_suite):
+    run = _run(installation, default_suite, AuditRun.ReportState.AWAITING_APPROVAL)
+    run.transition_report_to(AuditRun.ReportState.REJECTED)
+    run.refresh_from_db()
+    assert run.report_state == AuditRun.ReportState.REJECTED
+
+
+@pytest.mark.django_db
+def test_report_cannot_skip_approval(installation, default_suite):
+    run = _run(installation, default_suite, AuditRun.ReportState.AWAITING_APPROVAL)
+    with pytest.raises(ValueError, match="Cannot transition report"):
+        run.transition_report_to(AuditRun.ReportState.SENT)
+
+
+@pytest.mark.django_db
+def test_rejected_report_is_terminal(installation, default_suite):
+    run = _run(installation, default_suite, AuditRun.ReportState.REJECTED)
+    with pytest.raises(ValueError, match="Cannot transition report"):
+        run.transition_report_to(AuditRun.ReportState.APPROVED)
+
+
+@pytest.mark.django_db
+def test_report_transition_is_compare_and_set(installation, default_suite):
+    """A double-clicked Approve must not let both requests through."""
+    run = _run(installation, default_suite, AuditRun.ReportState.AWAITING_APPROVAL)
+    stale = AuditRun.objects.get(pk=run.pk)  # second in-memory copy
+    run.transition_report_to(AuditRun.ReportState.APPROVED)
+    with pytest.raises(ValueError, match="concurrently"):
+        stale.transition_report_to(AuditRun.ReportState.APPROVED)
