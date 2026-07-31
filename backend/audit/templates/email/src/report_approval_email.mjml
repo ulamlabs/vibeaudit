@@ -1,0 +1,47 @@
+<mjml>
+  <mj-head>
+    <mj-title>VibeAudit — Report Awaiting Approval</mj-title>
+    <mj-preview>Report for {{ repo_name }} is ready to review</mj-preview>
+  </mj-head>
+
+  <mj-body>
+
+    <mj-section>
+      <mj-column>
+        <mj-text font-weight="bold" font-size="20px">
+          Report Awaiting Approval
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section>
+      <mj-column>
+        <mj-text>
+          An audit run has completed. The report is held and will not be sent to the submitter until you approve it.
+        </mj-text>
+        <mj-text>
+          <strong>Repository:</strong> {{ repo_name }}<br />
+          <strong>Suite:</strong> {{ suite_name }}<br />
+          <strong>Run ID:</strong> {{ run_id }}<br />
+          <strong>Cost:</strong> {{ cost_usd|default_if_none:"not tracked" }}
+        </mj-text>
+        <mj-text font-weight="bold">Summary</mj-text>
+        <mj-text>{{ summary|linebreaksbr }}</mj-text>
+        <mj-raw>{% if site_url %}</mj-raw>
+        <mj-button href="{{ site_url }}/admin/audit/auditrun/{{ run_id }}/change/">
+          Review and approve
+        </mj-button>
+        <mj-raw>{% endif %}</mj-raw>
+      </mj-column>
+    </mj-section>
+
+    <mj-section>
+      <mj-column>
+        <mj-text font-size="11px">
+          You received this email because you are a member of the <strong>audit_notifications</strong> group.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+  </mj-body>
+</mjml>

@@ -18,9 +18,10 @@ _IS_CONSOLE_EMAIL = (
 _BUNDLED_EMAIL_DIR = settings.BASE_DIR / "audit" / "templates" / "email"
 
 _DEFAULT_REPORT_SUBJECT = settings.REPORT_EMAIL_SUBJECT
-_DEFAULT_FAILURE_SUBJECT = "VibeAudit Audit Failed"
 _DEFAULT_SUBMISSION_SUBJECT = "New VibeAudit Submission"
 _DEFAULT_CLONE_FAILURE_SUBJECT = "VibeAudit Clone Failed"
+_DEFAULT_REPORT_APPROVAL_SUBJECT = "VibeAudit Report Awaiting Approval"
+_DEFAULT_RUN_FAILURE_SUBJECT = "VibeAudit Audit Run Failed"
 
 
 def _staff_notification_recipients() -> list[str]:
@@ -77,7 +78,11 @@ def render_report_email(run, pdf_attached: bool) -> tuple[str, str, str]:
 
 
 def send_report_email(run) -> None:
-    """Send the audit report to job.email with PDF attachment. No-op if email is blank."""
+    """
+    Send the audit report to job.email with PDF attachment. No-op if email is
+    blank. Errors propagate: the caller leaves report_state at 'approved' so the
+    admin's Resend action can retry.
+    """
     if not run.job.email:
         return
 
@@ -90,36 +95,79 @@ def send_report_email(run) -> None:
     msg = EmailMultiAlternatives(subject=subject, body=plain_body, to=[run.job.email])
     if pdf_attached:
         msg.attach("report.pdf", pdf_bytes, "application/pdf")
+    _send(msg, html_body)
+
+
+def send_report_approval_notification(run) -> None:
+    """Tell staff a completed report is held pending a human decision."""
     try:
+        recipients = _staff_notification_recipients()
+        if not recipients:
+            return
+
+        ctx = Context(
+            {
+                "repo_name": run.job.repo_full_name,
+                "suite_name": run.suite.name,
+                "summary": run.summary,
+                "cost_usd": run.cost_usd,
+                "run_id": run.pk,
+                "site_url": settings.SITE_URL,
+            }
+        )
+        html_body = Template(
+            _load_email_template("report_approval_email.html")
+        ).render(ctx)
+        plain_body = (
+            f"The audit report for {run.job.repo_full_name} (run #{run.pk}) is "
+            "complete and awaiting approval before it is sent to the submitter."
+        )
+        msg = EmailMultiAlternatives(
+            subject=_DEFAULT_REPORT_APPROVAL_SUBJECT,
+            body=plain_body,
+            to=recipients,
+        )
         _send(msg, html_body)
     except Exception:
-        logger.exception("Failed to send report email for run %s", run.pk)
+        logger.exception(
+            "Failed to send report-approval notification for run %s", run.pk
+        )
 
 
-def send_failure_email(run) -> None:
-    """Notify the submitter that their audit run failed. No-op if email is blank."""
-    if not run.job.email:
-        return
-
-    repo_name = run.job.repo_full_name
-    ctx = Context(
-        {"repo_name": repo_name, "run_id": run.pk, "site_url": settings.SITE_URL}
-    )
-    html_body = Template(_load_email_template("failure_email.html")).render(ctx)
-    plain_body = (
-        f"Your audit for {repo_name} failed (run ID: {run.pk}). "
-        "Please contact the administrator for assistance."
-    )
-
-    msg = EmailMultiAlternatives(
-        subject=Template(_DEFAULT_FAILURE_SUBJECT).render(ctx),
-        body=plain_body,
-        to=[run.job.email],
-    )
+def send_run_failure_notification(run) -> None:
+    """
+    Tell staff a run failed. The submitter is an anonymous funnel visitor who
+    cannot act on it, so only staff are notified and they decide out of band
+    what, if anything, to tell the submitter.
+    """
     try:
+        recipients = _staff_notification_recipients()
+        if not recipients:
+            return
+
+        ctx = Context(
+            {
+                "repo_name": run.job.repo_full_name,
+                "suite_name": run.suite.name,
+                "submitter_email": run.job.email,
+                "reason": run.error,
+                "run_id": run.pk,
+                "site_url": settings.SITE_URL,
+            }
+        )
+        html_body = Template(_load_email_template("run_failure_email.html")).render(ctx)
+        plain_body = (
+            f"Audit run #{run.pk} for {run.job.repo_full_name} failed: "
+            f"{run.error}. The submitter has NOT been notified."
+        )
+        msg = EmailMultiAlternatives(
+            subject=_DEFAULT_RUN_FAILURE_SUBJECT,
+            body=plain_body,
+            to=recipients,
+        )
         _send(msg, html_body)
     except Exception:
-        logger.exception("Failed to send failure email for run %s", run.pk)
+        logger.exception("Failed to send run-failure notification for run %s", run.pk)
 
 
 def send_new_submission_notification(job) -> None:

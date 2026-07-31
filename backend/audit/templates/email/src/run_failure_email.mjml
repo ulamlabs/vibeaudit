@@ -1,0 +1,47 @@
+<mjml>
+  <mj-head>
+    <mj-title>VibeAudit — Audit Run Failed</mj-title>
+    <mj-preview>Run {{ run_id }} for {{ repo_name }} failed</mj-preview>
+  </mj-head>
+
+  <mj-body>
+
+    <mj-section>
+      <mj-column>
+        <mj-text font-weight="bold" font-size="20px">
+          Audit Run Failed
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section>
+      <mj-column>
+        <mj-text>
+          An audit run failed. The submitter has <strong>not</strong> been notified — decide what to tell them.
+        </mj-text>
+        <mj-text>
+          <strong>Repository:</strong> {{ repo_name }}<br />
+          <strong>Suite:</strong> {{ suite_name }}<br />
+          <strong>Run ID:</strong> {{ run_id }}<br />
+          <strong>Submitted by:</strong> {{ submitter_email }}
+        </mj-text>
+        <mj-text font-weight="bold">Reason</mj-text>
+        <mj-text>{{ reason|linebreaksbr }}</mj-text>
+        <mj-raw>{% if site_url %}</mj-raw>
+        <mj-button href="{{ site_url }}/admin/audit/auditrun/{{ run_id }}/change/">
+          Open in Admin
+        </mj-button>
+        <mj-raw>{% endif %}</mj-raw>
+      </mj-column>
+    </mj-section>
+
+    <mj-section>
+      <mj-column>
+        <mj-text font-size="11px">
+          You received this email because you are a member of the <strong>audit_notifications</strong> group.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+  </mj-body>
+</mjml>
