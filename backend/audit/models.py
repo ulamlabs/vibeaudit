@@ -57,9 +57,9 @@ class AuditJob(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     keep_sources = models.BooleanField(
         default=False,
-        help_text="Keep the cloned sources after a run so the job can be re-run. "
-        "Defaults False (external jobs are cleaned up after one run); only staff "
-        "submitters may opt in to keeping sources.",
+        help_text="Never auto-delete the cloned sources. Off (default) means the "
+        "clone is removed once every report on this job has been approved and "
+        "sent; only staff submitters may opt in to keeping sources.",
     )
 
     class Meta:
@@ -141,6 +141,31 @@ class AuditJob(models.Model):
     def cleanup(self) -> None:
         self.transition_to(self.State.CLOSED)
         self.delete_clone()
+
+    @property
+    def has_outstanding_runs(self) -> bool:
+        """True while some run still needs the clone or a human decision."""
+        return self.runs.filter(
+            models.Q(status__in=[AuditRun.Status.PENDING, AuditRun.Status.RUNNING])
+            | models.Q(report_state=AuditRun.ReportState.AWAITING_APPROVAL)
+        ).exists()
+
+    @classmethod
+    def maybe_cleanup_sources(cls, job_id: int) -> bool:
+        """
+        Close the job and drop its clone once nothing needs it any more.
+        Locks the job row: two reports approved at the same instant would
+        otherwise each read the other as outstanding and both skip cleanup,
+        stranding the clone on disk forever.
+        """
+        with transaction.atomic():
+            job = cls.objects.select_for_update().get(pk=job_id)
+            if job.keep_sources or job.state != cls.State.READY:
+                return False
+            if job.has_outstanding_runs:
+                return False
+            job.cleanup()
+            return True
 
     def __str__(self):
         return f"AuditJob #{self.pk} ({self.repo_full_name} - {self.state})"

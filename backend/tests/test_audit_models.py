@@ -317,3 +317,95 @@ def test_report_transition_is_compare_and_set(installation, default_suite):
     run.transition_report_to(AuditRun.ReportState.APPROVED)
     with pytest.raises(ValueError, match="concurrently"):
         stale.transition_report_to(AuditRun.ReportState.APPROVED)
+
+
+def _ready_job_with_clone(installation, keep_sources=False):
+    job = AuditJob.objects.create(
+        installation=installation,
+        repo_full_name="o/r",
+        email="a@b.c",
+        keep_sources=keep_sources,
+    )
+    job.state = AuditJob.State.READY
+    job.save(update_fields=["state"])
+    return job
+
+
+@pytest.mark.django_db
+def test_maybe_cleanup_closes_job_when_nothing_outstanding(installation, default_suite):
+    job = _ready_job_with_clone(installation)
+    run = AuditRun.objects.create(
+        job=job, suite=default_suite, status=AuditRun.Status.COMPLETED
+    )
+    AuditRun.objects.filter(pk=run.pk).update(report_state=AuditRun.ReportState.SENT)
+    assert AuditJob.maybe_cleanup_sources(job.pk) is True
+    job.refresh_from_db()
+    assert job.state == AuditJob.State.CLOSED
+
+
+@pytest.mark.django_db
+def test_maybe_cleanup_skips_while_another_report_awaits(installation, default_suite):
+    """Approving report A must not yank the clone out from under report B."""
+    job = _ready_job_with_clone(installation)
+    sent = AuditRun.objects.create(
+        job=job, suite=default_suite, status=AuditRun.Status.COMPLETED
+    )
+    AuditRun.objects.filter(pk=sent.pk).update(report_state=AuditRun.ReportState.SENT)
+    waiting = AuditRun.objects.create(
+        job=job, suite=default_suite, status=AuditRun.Status.COMPLETED
+    )
+    AuditRun.objects.filter(pk=waiting.pk).update(
+        report_state=AuditRun.ReportState.AWAITING_APPROVAL
+    )
+    assert AuditJob.maybe_cleanup_sources(job.pk) is False
+    job.refresh_from_db()
+    assert job.state == AuditJob.State.READY
+
+
+@pytest.mark.django_db
+def test_maybe_cleanup_skips_while_a_run_is_in_flight(installation, default_suite):
+    job = _ready_job_with_clone(installation)
+    AuditRun.objects.create(
+        job=job, suite=default_suite, status=AuditRun.Status.RUNNING
+    )
+    assert AuditJob.maybe_cleanup_sources(job.pk) is False
+
+
+@pytest.mark.django_db
+def test_maybe_cleanup_respects_keep_sources(installation, default_suite):
+    job = _ready_job_with_clone(installation, keep_sources=True)
+    assert AuditJob.maybe_cleanup_sources(job.pk) is False
+    job.refresh_from_db()
+    assert job.state == AuditJob.State.READY
+
+
+@pytest.mark.django_db
+def test_maybe_cleanup_is_idempotent_on_a_closed_job(installation):
+    job = _ready_job_with_clone(installation)
+    job.cleanup()
+    assert AuditJob.maybe_cleanup_sources(job.pk) is False
+
+
+@pytest.mark.django_db
+def test_maybe_cleanup_deletes_the_clone_directory(
+    installation, default_suite, tmp_path, settings
+):
+    settings.REPOS_DIR = str(tmp_path)
+    job = _ready_job_with_clone(installation)
+    job.clone_path.mkdir(parents=True, exist_ok=True)
+    assert job.job_dir.exists()
+    assert AuditJob.maybe_cleanup_sources(job.pk) is True
+    assert not job.job_dir.exists()
+
+
+@pytest.mark.django_db
+def test_rejected_report_does_not_count_as_outstanding(installation, default_suite):
+    """A rejected report is resolved; only staff inaction keeps the job open."""
+    job = _ready_job_with_clone(installation)
+    run = AuditRun.objects.create(
+        job=job, suite=default_suite, status=AuditRun.Status.COMPLETED
+    )
+    AuditRun.objects.filter(pk=run.pk).update(
+        report_state=AuditRun.ReportState.REJECTED
+    )
+    assert job.has_outstanding_runs is False
