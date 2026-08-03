@@ -5,6 +5,7 @@ from django.conf import settings as django_settings
 from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group, User
+from django.db.models import Exists, OuterRef
 from django.http import HttpResponse
 from django.shortcuts import redirect
 from django.urls import reverse
@@ -433,14 +434,31 @@ class AuditJobAdmin(ModelAdmin):
     actions = ["bulk_cleanup"]
     actions_detail = ["approve_job", "reject_job", "mark_failed", "cleanup_job"]
 
+    def get_queryset(self, request):
+        # Annotate once instead of one EXISTS query per row: needs_attention
+        # otherwise runs obj.has_outstanding_runs per changelist row, and the
+        # `or` only short-circuits for overdue jobs, so nearly every row pays it.
+        return super().get_queryset(request).annotate(
+            _has_outstanding=Exists(
+                AuditRun.objects.filter(AuditJob.outstanding_runs_q(), job=OuterRef("pk"))
+            )
+        )
+
     @admin.display(description="Needs attention", boolean=True)
     def needs_attention(self, obj):
         # CLONING past the task hard time limit — the clone worker likely died;
         # use "Mark failed". Or READY with no run left to act on: the job is
         # holding its clone until staff re-run it or delete sources, and until
         # then the submitter's funnel still counts it as active.
+        #
+        # Uses the get_queryset annotation when present (changelist); falls
+        # back to the property for plain instances (change page, direct calls
+        # in tests) where the annotation was never attached.
+        has_outstanding = getattr(obj, "_has_outstanding", None)
+        if has_outstanding is None:
+            has_outstanding = obj.has_outstanding_runs
         return obj.is_overdue or (
-            obj.state == AuditJob.State.READY and not obj.has_outstanding_runs
+            obj.state == AuditJob.State.READY and not has_outstanding
         )
 
     # Unfold renders a detail action only when its has_<name>_permission hook

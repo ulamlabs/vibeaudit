@@ -3,12 +3,27 @@ from unittest.mock import patch
 
 import pytest
 from django.contrib.admin.sites import site
+from django.contrib.auth.models import User
 from django.core.exceptions import PermissionDenied
+from django.db import connection
+from django.test import Client, override_settings
+from django.test.utils import CaptureQueriesContext
+from django.urls import reverse
 from django.utils import timezone
 
 from audit.admin import AuditJobAdmin, AuditRunAdmin
 from audit.models import SEND_STRANDED_SECONDS, AuditAgent, AuditJob, AuditRun, AuditSuite
 from github_app.models import Installation
+
+# AuditRunAdmin.Media references a real static asset (audit/md_preview.css).
+# Under the whitenoise ManifestStaticFilesStorage used in production settings,
+# rendering admin pages requires a collected staticfiles manifest, which the
+# test run doesn't produce. Swap in the plain (non-manifest) storage just for
+# rendering — see test_admin_button_rendering.py, which solves this the same way.
+_NON_MANIFEST_STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+}
 
 
 @pytest.fixture
@@ -293,3 +308,86 @@ def test_run_fresh_approval_does_not_need_attention(installation, suite):
     admin_obj = AuditRunAdmin(AuditRun, site)
     run = _run(installation, suite, AuditRun.ReportState.APPROVED)
     assert admin_obj.needs_attention(run) is False
+
+
+def _make_ready_jobs(installation, n):
+    """READY jobs with no runs: needs_attention must consult
+    has_outstanding_runs for every one of them (is_overdue never short-
+    circuits), which is exactly the path that used to cost one EXISTS
+    query per row."""
+    AuditJob.objects.all().delete()
+    for i in range(n):
+        job = AuditJob.objects.create(
+            installation=installation, repo_full_name=f"o/r{i}", email="a@b.c"
+        )
+        AuditJob.objects.filter(pk=job.pk).update(state=AuditJob.State.READY)
+
+
+@pytest.mark.django_db
+def test_changelist_query_count_does_not_scale_with_row_count(installation):
+    """Proves the N+1 is gone: the changelist must issue the same number of
+    queries for 1 job as for 5 -- a test that only asserts "some number" would
+    not catch a regression back to a per-row EXISTS query."""
+    admin_user = User.objects.create_superuser(
+        username="root", email="root@example.com", password="pw"
+    )
+    client = Client()
+    client.force_login(admin_user)
+    url = reverse("admin:audit_auditjob_changelist")
+
+    _make_ready_jobs(installation, 1)
+    with override_settings(STORAGES=_NON_MANIFEST_STORAGES):
+        with CaptureQueriesContext(connection) as ctx_one:
+            response = client.get(url)
+        assert response.status_code == 200
+    count_one = len(ctx_one.captured_queries)
+
+    _make_ready_jobs(installation, 5)
+    with override_settings(STORAGES=_NON_MANIFEST_STORAGES):
+        with CaptureQueriesContext(connection) as ctx_five:
+            response = client.get(url)
+        assert response.status_code == 200
+    count_five = len(ctx_five.captured_queries)
+
+    assert count_one == count_five, (
+        f"query count scaled with row count: {count_one} for 1 job vs "
+        f"{count_five} for 5 jobs"
+    )
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "state, with_outstanding_run",
+    [
+        (AuditJob.State.READY, True),
+        (AuditJob.State.READY, False),
+        (AuditJob.State.CLOSED, False),
+    ],
+)
+def test_needs_attention_agrees_between_annotated_and_plain_instance(
+    installation, suite, state, with_outstanding_run
+):
+    """The annotated changelist path and the property fallback must never
+    disagree -- maybe_cleanup_sources decides whether to delete a customer's
+    cloned sources off has_outstanding_runs, so a drift here would mean the
+    admin shows staff a different answer than what actually gates cleanup."""
+    job = AuditJob.objects.create(
+        installation=installation, repo_full_name="o/r", email="a@b.c"
+    )
+    AuditJob.objects.filter(pk=job.pk).update(state=state)
+    if with_outstanding_run:
+        AuditRun.objects.create(
+            job=job, suite=suite, status=AuditRun.Status.PENDING
+        )
+
+    admin_obj = AuditJobAdmin(AuditJob, site)
+
+    plain = AuditJob.objects.get(pk=job.pk)
+    assert getattr(plain, "_has_outstanding", None) is None
+    plain_result = admin_obj.needs_attention(plain)
+
+    annotated = admin_obj.get_queryset(None).get(pk=job.pk)
+    assert getattr(annotated, "_has_outstanding", None) is not None
+    annotated_result = admin_obj.needs_attention(annotated)
+
+    assert plain_result == annotated_result

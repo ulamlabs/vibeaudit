@@ -146,19 +146,29 @@ class AuditJob(models.Model):
         self.transition_to(self.State.CLOSED)
         self.delete_clone()
 
+    @staticmethod
+    def outstanding_runs_q() -> models.Q:
+        """The condition for 'this run still needs the clone or a human decision'.
+
+        Single source of truth shared by has_outstanding_runs and the admin's
+        annotated queryset — maybe_cleanup_sources decides whether to delete a
+        customer's cloned sources based on this, so the two call sites must
+        never drift into independently-written copies of the condition.
+        """
+        return models.Q(
+            status__in=[AuditRun.Status.PENDING, AuditRun.Status.RUNNING]
+        ) | models.Q(
+            report_state__in=[
+                AuditRun.ReportState.AWAITING_APPROVAL,
+                AuditRun.ReportState.APPROVED,
+                AuditRun.ReportState.SENDING,
+            ]
+        )
+
     @property
     def has_outstanding_runs(self) -> bool:
         """True while some run still needs the clone or a human decision."""
-        return self.runs.filter(
-            models.Q(status__in=[AuditRun.Status.PENDING, AuditRun.Status.RUNNING])
-            | models.Q(
-                report_state__in=[
-                    AuditRun.ReportState.AWAITING_APPROVAL,
-                    AuditRun.ReportState.APPROVED,
-                    AuditRun.ReportState.SENDING,
-                ]
-            )
-        ).exists()
+        return self.runs.filter(self.outstanding_runs_q()).exists()
 
     @classmethod
     def maybe_cleanup_sources(cls, job_id: int) -> bool:
