@@ -158,11 +158,23 @@ An audit passes two human gates:
    so **Resend report** can retry. `approved` therefore always means "queued or
    retryable," never "in flight." **Reject report** sends nothing, ever.
 
-If a worker dies mid-send, the run is stuck at `sending` with a stale
-`sending_since`. Once that exceeds a generous window it is flagged **Needs
-attention** in the admin (the same lazy-detection idiom used for overdue
-clones/runs), and a **Reset to approved** action becomes available to unstick
-it back to `approved` for a retry via **Resend report**.
+A run is flagged **Needs attention** in the admin (the same lazy-detection
+idiom used for overdue clones) under any of four conditions, each with its
+own remedy:
+
+- **Stuck running** — `running` past the suite's hard time limit (plus
+  grace); the worker likely died without reaching failure handling. Remedy:
+  **Terminate execution**.
+- **Stranded send** — a worker died mid-send, leaving the run at `sending`
+  with a stale `sending_since` past a generous window. Remedy: **Reset to
+  approved**, then **Resend report**.
+- **Failed send** — `approved` with `sending_since` still set (the
+  failed-send rollback preserves it instead of clearing it); a send was
+  attempted and failed, and nothing retries it automatically. Remedy:
+  **Resend report**.
+- **Send never claimed** — `approved` with `sending_since` never set, but
+  `approved_at` past that same window; the queue message that should have
+  triggered the send was lost. Remedy: **Resend report**.
 
 Cloned sources survive until every report on the job is resolved, so a rejected
 report can be followed by a new run with a different suite — add one from the

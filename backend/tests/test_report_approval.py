@@ -13,6 +13,7 @@ from audit.email import (
     send_run_failure_notification,
 )
 from audit.models import SEND_STRANDED_SECONDS, AuditAgent, AuditJob, AuditRun, AuditSuite
+from audit.tasks import send_approved_report
 from github_app.models import Installation
 
 
@@ -123,9 +124,12 @@ def test_notifications_are_best_effort(installation, suite, notified_staff, capl
 
 
 @pytest.mark.django_db
-def test_notifications_noop_without_recipients(installation, suite):
+@pytest.mark.parametrize(
+    "notify", [send_report_approval_notification, send_run_failure_notification]
+)
+def test_notifications_noop_without_recipients(installation, suite, notify):
     run = _completed_run(installation, suite)
-    send_report_approval_notification(run)
+    notify(run)
     assert mail.outbox == []
 
 
@@ -146,9 +150,6 @@ def test_send_failure_email_is_gone():
     import audit.email
 
     assert not hasattr(audit.email, "send_failure_email")
-
-
-from audit.tasks import send_approved_report
 
 
 def _approved_run(installation, suite):

@@ -70,6 +70,7 @@ def test_markdown_editable_only_while_awaiting_approval(installation, suite):
     "state",
     [
         AuditRun.ReportState.APPROVED,
+        AuditRun.ReportState.SENDING,
         AuditRun.ReportState.SENT,
         AuditRun.ReportState.REJECTED,
         "",

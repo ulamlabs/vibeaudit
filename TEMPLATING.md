@@ -89,12 +89,16 @@ Email templates use **MJML** syntax compiled to HTML. Write them as MJML documen
 | `pdf_attached` | `bool` | `True` when the PDF was small enough to attach (≤ 10 MB). |
 | `site_url` | `str` | Site base URL, or empty string. |
 
-### failure_email — audit failed
+### failure_email — clone failed
+
+Sent to staff members in the `audit_notifications` group when cloning fails,
+before any `AuditRun` exists.
 
 | Variable | Type | Description |
 |---|---|---|
 | `repo_name` | `str` | `job.repo_full_name` |
-| `run_id` | `int` | Primary key of the failed run. |
+| `run_id` | `str` | `f"job-{job.pk}"` — no run exists yet at the clone stage; this identifies the job instead. |
+| `reason` | `str` | Exception message from the failed clone. |
 | `site_url` | `str` | Site base URL, or empty string. |
 
 ### new_submission_email — awaiting approval

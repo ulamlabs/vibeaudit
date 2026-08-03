@@ -340,8 +340,14 @@ def test_fresh_approval_leaves_sending_since_null_and_not_flagged(
     installation, default_suite
 ):
     """A normal admin approval (awaiting_approval -> approved) must not be
-    mistaken for a failed-send rollback."""
+    mistaken for a failed-send rollback. Starts from a non-null sending_since
+    (a stray value, unrealistic in practice but the only way to prove the
+    transition actively clears it rather than merely leaving null alone) so
+    this diverges from the rollback path in test_rollback_from_sending_preserves_sending_since,
+    which preserves the same kind of value."""
     run = _run(installation, default_suite, AuditRun.ReportState.AWAITING_APPROVAL)
+    run.sending_since = timezone.now()
+    run.save(update_fields=["sending_since"])
     run.transition_report_to(AuditRun.ReportState.APPROVED)
     run.refresh_from_db()
     assert run.sending_since is None
