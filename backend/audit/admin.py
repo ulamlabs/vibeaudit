@@ -144,15 +144,17 @@ class AuditRunAdmin(ModelAdmin):
         "job",
         "suite",
         "status",
+        "report_state",
         "needs_attention",
         "cost_usd",
         "created_at",
     ]
-    list_filter = ["status", "suite", "job"]
+    list_filter = ["status", "report_state", "suite", "job"]
     search_fields = ["job__repo_full_name"]
     inlines = [AgentRunOutputInline]
-    readonly_fields = [
+    _BASE_READONLY = [
         "status",
+        "report_state",
         "summary",
         "report_html",
         "report_raw",
@@ -163,7 +165,23 @@ class AuditRunAdmin(ModelAdmin):
         "finished_at",
         "celery_task_id",
     ]
-    actions_detail = ["terminate_run", "download_pdf"]
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = list(self._BASE_READONLY)
+        # The report body is editable only while a human is deciding on it.
+        # Enforced here, not just in get_fields — hiding a field does not stop a POST.
+        if obj is None or obj.report_state != AuditRun.ReportState.AWAITING_APPROVAL:
+            fields.append("markdown")
+        return fields
+
+    actions_detail = [
+        "approve_report",
+        "reject_report",
+        "resend_report",
+        "reset_stranded_send",
+        "terminate_run",
+        "download_pdf",
+    ]
 
     @action(description="Download PDF", url_path="download-pdf")
     def download_pdf(self, request, object_id):
@@ -180,13 +198,12 @@ class AuditRunAdmin(ModelAdmin):
     def get_fields(self, request, obj=None):
         if obj is None:
             return ["job", "suite"]
-        return [
-            "job",
-            "suite",
-            "status",
-            "summary",
-            "report_html",
-            "report_raw",
+        fields = ["job", "suite", "status", "report_state", "summary"]
+        if obj.report_state == AuditRun.ReportState.AWAITING_APPROVAL:
+            fields += ["markdown", "report_html"]
+        else:
+            fields += ["report_html", "report_raw"]
+        return fields + [
             "error",
             "cost_usd",
             "celery_task_id",
@@ -194,6 +211,14 @@ class AuditRunAdmin(ModelAdmin):
             "started_at",
             "finished_at",
         ]
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        if "markdown" in form.base_fields:
+            form.base_fields["markdown"].widget = forms.Textarea(
+                attrs={"rows": 30, "style": "font-family: monospace; font-size: 12px;"}
+            )
+        return form
 
     @admin.display(description="Needs attention", boolean=True)
     def needs_attention(self, obj):
@@ -217,6 +242,68 @@ class AuditRunAdmin(ModelAdmin):
         if not change:  # enqueue on creation only; editing must not re-run
             obj.enqueue()
             self.message_user(request, f"Run #{obj.pk} queued.")
+
+    def _redirect_to_change(self, object_id):
+        return redirect(reverse("admin:audit_auditrun_change", args=[object_id]))
+
+    @action(description="Approve & send", url_path="approve-report")
+    def approve_report(self, request, object_id):
+        run = AuditRun.objects.get(pk=object_id)
+        try:
+            run.transition_report_to(AuditRun.ReportState.APPROVED)
+        except ValueError as e:
+            self.message_user(request, str(e), messages.ERROR)
+        else:
+            run.enqueue_send()
+            self.message_user(request, f"Report for run #{run.pk} queued for sending.")
+        return self._redirect_to_change(object_id)
+
+    @action(description="Reject report", url_path="reject-report")
+    def reject_report(self, request, object_id):
+        run = AuditRun.objects.get(pk=object_id)
+        try:
+            run.transition_report_to(AuditRun.ReportState.REJECTED)
+        except ValueError as e:
+            self.message_user(request, str(e), messages.ERROR)
+        else:
+            self.message_user(
+                request,
+                f"Report for run #{run.pk} rejected; nothing sent. Sources are kept "
+                f"so job #{run.job_id} can be re-run with another suite.",
+                messages.WARNING,
+            )
+        return self._redirect_to_change(object_id)
+
+    @action(description="Resend report", url_path="resend-report")
+    def resend_report(self, request, object_id):
+        run = AuditRun.objects.get(pk=object_id)
+        if run.report_state != AuditRun.ReportState.APPROVED:
+            self.message_user(
+                request,
+                f"Cannot resend: run #{run.pk} report is {run.report_state!r}, "
+                "not 'approved'.",
+                messages.ERROR,
+            )
+        else:
+            run.enqueue_send()
+            self.message_user(request, f"Report for run #{run.pk} re-queued.")
+        return self._redirect_to_change(object_id)
+
+    @action(description="Reset to approved", url_path="reset-send")
+    def reset_stranded_send(self, request, object_id):
+        """Unstick a report whose worker died mid-send (stuck `sending`)."""
+        run = AuditRun.objects.get(pk=object_id)
+        try:
+            run.transition_report_to(AuditRun.ReportState.APPROVED)
+        except ValueError as e:
+            self.message_user(request, str(e), messages.ERROR)
+        else:
+            self.message_user(
+                request,
+                f"Report for run #{run.pk} reset to approved; use Resend to retry.",
+                messages.WARNING,
+            )
+        return self._redirect_to_change(object_id)
 
     @action(description="Terminate execution", url_path="terminate")
     def terminate_run(self, request, object_id):
@@ -245,7 +332,7 @@ class AuditRunAdmin(ModelAdmin):
                     "terminated; left unchanged.",
                     messages.WARNING,
                 )
-        return redirect(reverse("admin:audit_auditrun_change", args=[object_id]))
+        return self._redirect_to_change(object_id)
 
 
 @admin.register(AuditJob)
