@@ -108,6 +108,36 @@ Sent to staff members in the `audit_notifications` group.
 | `job_id` | `int` | Primary key of the `AuditJob`. |
 | `site_url` | `str` | Site base URL. Admin review link: `{{ site_url }}/admin/audit/auditjob/{{ job_id }}/change/` |
 
+### report_approval_email — report awaiting approval
+
+Sent to staff members in the `audit_notifications` group when a run completes
+and its report is held at `awaiting_approval`. Not customisable per suite —
+unlike `report_email.html`, there is no `AuditSuite.email_html_body` override.
+
+| Variable | Type | Description |
+|---|---|---|
+| `repo_name` | `str` | `job.repo_full_name` |
+| `suite_name` | `str` | `run.suite.name` |
+| `summary` | `str` | `run.summary` |
+| `cost_usd` | `Decimal \| None` | `run.cost_usd`, `None` when not tracked. |
+| `run_id` | `int` | `run.pk`. Admin review link: `{{ site_url }}/admin/audit/auditrun/{{ run_id }}/change/` |
+| `site_url` | `str` | Site base URL, or empty string. |
+
+### run_failure_email — run failed
+
+Sent to staff members in the `audit_notifications` group when a run's status
+becomes `failed`. Distinct from `failure_email.html`, which covers a failure at
+the earlier clone stage. Not customisable per suite.
+
+| Variable | Type | Description |
+|---|---|---|
+| `repo_name` | `str` | `job.repo_full_name` |
+| `suite_name` | `str` | `run.suite.name` |
+| `submitter_email` | `str` | `job.email` |
+| `reason` | `str` | `run.error` |
+| `run_id` | `int` | `run.pk` |
+| `site_url` | `str` | Site base URL, or empty string. |
+
 ### Django template syntax in MJML
 
 `{{ variables }}` inside `<mj-text>` content work as-is — MJML passes them through untouched.

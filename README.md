@@ -128,13 +128,47 @@ Email sources are MJML (`backend/audit/templates/email/src/*.mjml`); recompile a
 just compile-email   # alias: just ce
 ```
 
-The three transactional emails:
+The transactional emails:
 
-| Template | Sent when |
-|---|---|
-| `report_email.html` | Audit completed — report delivered to submitter |
-| `failure_email.html` | Audit run failed — submitter notified with a reference ID |
-| `new_submission_email.html` | Job reaches `AWAITING_APPROVAL` — staff notified |
+| Template | Sent when | Sent to |
+|---|---|---|
+| `new_submission_email.html` | A clone finished — job awaiting approval | Staff (`audit_notifications`) |
+| `report_approval_email.html` | A run completed — report held for approval | Staff (`audit_notifications`) |
+| `report_email.html` | A staff member approved the report | Submitter |
+| `run_failure_email.html` | A run failed | Staff (`audit_notifications`) |
+| `failure_email.html` | Cloning failed | Staff (`audit_notifications`) |
+
+Submitters are never emailed automatically: the report is delivered only after a
+staff member approves it, and failures are reported to staff, who decide what to
+tell the submitter.
+
+### Approval flow
+
+An audit passes two human gates:
+
+1. **Job approval** — a submitted repo is cloned, then held at `awaiting_approval`
+   until staff approve it in the admin. Approving starts a run.
+2. **Report approval** — a completed run holds its report at `awaiting_approval`.
+   Staff can edit the report body, then **Approve & send** or **Reject report**.
+   Approving does not send synchronously: it transitions the report to
+   `approved` and enqueues delivery. A worker then claims the run
+   (`approved -> sending`) before emailing the submitter, so two racing workers
+   (e.g. an impatient Resend) cannot both deliver the same report. On success
+   the run moves to `sent`; on a delivery failure it rolls back to `approved`
+   so **Resend report** can retry. `approved` therefore always means "queued or
+   retryable," never "in flight." **Reject report** sends nothing, ever.
+
+If a worker dies mid-send, the run is stuck at `sending` with a stale
+`sending_since`. Once that exceeds a generous window it is flagged **Needs
+attention** in the admin (the same lazy-detection idiom used for overdue
+clones/runs), and a **Reset to approved** action becomes available to unstick
+it back to `approved` for a retry via **Resend report**.
+
+Cloned sources survive until every report on the job is resolved, so a rejected
+report can be followed by a new run with a different suite — add one from the
+AuditRun admin while the job is still `Ready`. Once no run on the job is still
+pending/running or awaiting report approval, the job is closed and its clone
+deleted.
 
 Operator notes:
 
