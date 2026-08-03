@@ -13,6 +13,10 @@ from django.utils import timezone
 # overdue (the hard limit SIGKILLs the worker, skipping failure handling).
 OVERDUE_GRACE_SECONDS = 120
 
+# A send is one PDF render plus one SMTP round trip; a report still `sending`
+# well past that lost its worker before it could roll back or finish.
+SEND_STRANDED_SECONDS = 900
+
 
 class AuditJob(models.Model):
     """Model representing an audit job for a GitHub repository."""
@@ -354,13 +358,18 @@ class AuditRun(models.Model):
     class ReportState(models.TextChoices):
         AWAITING_APPROVAL = "awaiting_approval", "Awaiting Approval"
         APPROVED = "approved", "Approved"
+        SENDING = "sending", "Sending"
         SENT = "sent", "Sent"
         REJECTED = "rejected", "Rejected"
 
     # Blank (the default) means "no report stage" — a run that has not completed.
+    # `sending` is claimed atomically before the send so two workers cannot both
+    # deliver; it rolls back to `approved` when the send fails, which is what
+    # makes `approved` mean "retry me" and keeps the Resend action honest.
     REPORT_VALID_TRANSITIONS: dict[str, list[str]] = {
         ReportState.AWAITING_APPROVAL: [ReportState.APPROVED, ReportState.REJECTED],
-        ReportState.APPROVED: [ReportState.SENT],
+        ReportState.APPROVED: [ReportState.SENDING],
+        ReportState.SENDING: [ReportState.SENT, ReportState.APPROVED],
     }
 
     job = models.ForeignKey(AuditJob, related_name="runs", on_delete=models.CASCADE)
@@ -396,6 +405,12 @@ class AuditRun(models.Model):
             "a completed report waits at 'awaiting_approval' until a staff member "
             "approves or rejects it."
         ),
+    )
+    sending_since = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Set when a worker claims this report for sending; cleared on any "
+        "transition out of 'sending'. Used to spot a worker that died mid-send.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True)
@@ -451,9 +466,11 @@ class AuditRun(models.Model):
             )
         # Compare-and-set, like AuditJob.transition_to: a double-clicked Approve
         # cannot pass the guard twice.
+        # Only send_approved_report's claim sets sending_since; every transition
+        # out of `sending` clears it.
         updated = AuditRun.objects.filter(
             pk=self.pk, report_state=self.report_state
-        ).update(report_state=new_state)
+        ).update(report_state=new_state, sending_since=None)
         if not updated:
             self.refresh_from_db(fields=["report_state"])
             raise ValueError(
@@ -461,6 +478,20 @@ class AuditRun(models.Model):
                 f"moved to {self.report_state!r}"
             )
         self.report_state = new_state
+        self.sending_since = None
+
+    @property
+    def send_is_stranded(self) -> bool:
+        """
+        Lazily detect a worker that died mid-send: `sending` past a generous send
+        window. Checked on read — no beat schedule needed, mirroring is_overdue.
+        Remedy: the admin "Reset to approved" action.
+        """
+        if self.report_state != AuditRun.ReportState.SENDING or not self.sending_since:
+            return False
+        return timezone.now() > self.sending_since + timedelta(
+            seconds=SEND_STRANDED_SECONDS
+        )
 
     def enqueue_send(self):
         """Queue the approved report for delivery once the current transaction commits."""

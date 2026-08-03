@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pytest
 from django.contrib.auth.models import Group, User
 from django.core import mail
+from django.utils import timezone
 
 from audit.email import (
     send_report_approval_notification,
@@ -170,6 +171,7 @@ def test_send_approved_report_sends_marks_sent_and_cleans_up(installation, suite
     cleanup.assert_called_once_with(run.job_id)
     run.refresh_from_db()
     assert run.report_state == AuditRun.ReportState.SENT
+    assert run.sending_since is None
 
 
 @pytest.mark.django_db
@@ -184,6 +186,7 @@ def test_send_failure_leaves_report_approved(installation, suite):
     cleanup.assert_not_called()
     run.refresh_from_db()
     assert run.report_state == AuditRun.ReportState.APPROVED
+    assert run.sending_since is None
 
 
 @pytest.mark.django_db
@@ -194,6 +197,39 @@ def test_send_approved_report_skips_runs_not_approved(installation, suite):
     with patch("audit.tasks.send_report_email") as send:
         send_approved_report(run.pk)
     send.assert_not_called()
+
+
+@pytest.mark.django_db
+def test_send_approved_report_skips_a_run_already_claimed_sending(
+    installation, suite
+):
+    """Simulates the second of two racing workers: the first already claimed
+    the run (approved -> sending), so this call must not send a second time."""
+    run = _approved_run(installation, suite)
+    AuditRun.objects.filter(pk=run.pk).update(
+        report_state=AuditRun.ReportState.SENDING, sending_since=timezone.now()
+    )
+    with patch("audit.tasks.send_report_email") as send:
+        send_approved_report(run.pk)
+    send.assert_not_called()
+    run.refresh_from_db()
+    assert run.report_state == AuditRun.ReportState.SENDING
+
+
+@pytest.mark.django_db
+def test_send_approved_report_claims_sending_before_send(installation, suite):
+    """Successful delivery moves approved -> sending -> sent."""
+    run = _approved_run(installation, suite)
+    seen_state = {}
+
+    def _capture(sent_run):
+        seen_state["report_state"] = AuditRun.objects.get(pk=sent_run.pk).report_state
+
+    with patch("audit.tasks.send_report_email", side_effect=_capture):
+        send_approved_report(run.pk)
+    assert seen_state["report_state"] == AuditRun.ReportState.SENDING
+    run.refresh_from_db()
+    assert run.report_state == AuditRun.ReportState.SENT
 
 
 @pytest.mark.django_db

@@ -211,24 +211,35 @@ def execute_audit_run(self, run_id: int) -> None:
 @shared_task
 def send_approved_report(run_id: int) -> None:
     """
-    Deliver an approved report, then release the job's clone. A send failure
-    leaves report_state at 'approved' so the admin's Resend action can retry —
-    marking it 'sent' on a failure would claim a delivery that never happened.
+    Deliver an approved report, then release the job's clone.
+
+    Claims the run (approved -> sending) with a compare-and-set before sending,
+    exactly as execute_audit_run claims pending -> running: two workers racing on
+    the same run (an impatient Resend while the first send is still queued) would
+    otherwise both reach the submitter. A failed send rolls back to 'approved' so
+    the Resend action can retry — marking it 'sent' would claim a delivery that
+    never happened.
     """
-    run = AuditRun.objects.select_related("job", "suite").get(pk=run_id)
-    if run.report_state != AuditRun.ReportState.APPROVED:
+    claimed = AuditRun.objects.filter(
+        pk=run_id, report_state=AuditRun.ReportState.APPROVED
+    ).update(
+        report_state=AuditRun.ReportState.SENDING, sending_since=timezone.now()
+    )
+    if not claimed:
         logger.warning(
-            "Run %s report_state is %r, not 'approved' (duplicate delivery or "
+            "Run %s is not 'approved' (duplicate delivery, already sending, or "
             "already sent); skipping send.",
             run_id,
-            run.report_state,
         )
         return
+
+    run = AuditRun.objects.select_related("job", "suite").get(pk=run_id)
 
     try:
         send_report_email(run)
     except Exception:
         logger.exception("Failed to send approved report for run %s", run_id)
+        run.transition_report_to(AuditRun.ReportState.APPROVED)
         return
 
     run.transition_report_to(AuditRun.ReportState.SENT)

@@ -1,11 +1,13 @@
+from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 from audit.admin import AuditRunForm
 from audit.ai.suites import suite_to_agent_definitions
-from audit.models import AuditAgent, AuditJob, AuditRun, AuditSuite
+from audit.models import SEND_STRANDED_SECONDS, AuditAgent, AuditJob, AuditRun, AuditSuite
 from github_app.models import Installation
 
 
@@ -317,6 +319,42 @@ def test_report_transition_is_compare_and_set(installation, default_suite):
     run.transition_report_to(AuditRun.ReportState.APPROVED)
     with pytest.raises(ValueError, match="concurrently"):
         stale.transition_report_to(AuditRun.ReportState.APPROVED)
+
+
+@pytest.mark.django_db
+def test_send_is_stranded_false_for_fresh_sending(installation, default_suite):
+    run = _run(installation, default_suite, AuditRun.ReportState.SENDING)
+    run.sending_since = timezone.now()
+    run.save(update_fields=["sending_since"])
+    assert run.send_is_stranded is False
+
+
+@pytest.mark.django_db
+def test_send_is_stranded_true_past_the_window(installation, default_suite):
+    run = _run(installation, default_suite, AuditRun.ReportState.SENDING)
+    run.sending_since = timezone.now() - timedelta(seconds=SEND_STRANDED_SECONDS + 1)
+    run.save(update_fields=["sending_since"])
+    assert run.send_is_stranded is True
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "report_state",
+    [
+        "",
+        AuditRun.ReportState.AWAITING_APPROVAL,
+        AuditRun.ReportState.APPROVED,
+        AuditRun.ReportState.SENT,
+        AuditRun.ReportState.REJECTED,
+    ],
+)
+def test_send_is_stranded_false_for_other_states(
+    installation, default_suite, report_state
+):
+    run = _run(installation, default_suite, report_state)
+    run.sending_since = timezone.now() - timedelta(seconds=SEND_STRANDED_SECONDS + 1)
+    run.save(update_fields=["sending_since"])
+    assert run.send_is_stranded is False
 
 
 def _ready_job_with_clone(installation, keep_sources=False):
