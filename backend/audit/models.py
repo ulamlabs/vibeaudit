@@ -151,7 +151,13 @@ class AuditJob(models.Model):
         """True while some run still needs the clone or a human decision."""
         return self.runs.filter(
             models.Q(status__in=[AuditRun.Status.PENDING, AuditRun.Status.RUNNING])
-            | models.Q(report_state=AuditRun.ReportState.AWAITING_APPROVAL)
+            | models.Q(
+                report_state__in=[
+                    AuditRun.ReportState.AWAITING_APPROVAL,
+                    AuditRun.ReportState.APPROVED,
+                    AuditRun.ReportState.SENDING,
+                ]
+            )
         ).exists()
 
     @classmethod
@@ -467,10 +473,19 @@ class AuditRun(models.Model):
         # Compare-and-set, like AuditJob.transition_to: a double-clicked Approve
         # cannot pass the guard twice.
         # Only send_approved_report's claim sets sending_since; every transition
-        # out of `sending` clears it.
+        # out of `sending` clears it EXCEPT the failed-send rollback (sending ->
+        # approved), which preserves it — that is the exact signal send_failed
+        # reads to flag "a send was attempted and failed" with no time window.
+        is_failed_send_rollback = (
+            self.report_state == AuditRun.ReportState.SENDING
+            and new_state == AuditRun.ReportState.APPROVED
+        )
+        update_fields = {"report_state": new_state}
+        if not is_failed_send_rollback:
+            update_fields["sending_since"] = None
         updated = AuditRun.objects.filter(
             pk=self.pk, report_state=self.report_state
-        ).update(report_state=new_state, sending_since=None)
+        ).update(**update_fields)
         if not updated:
             self.refresh_from_db(fields=["report_state"])
             raise ValueError(
@@ -478,7 +493,8 @@ class AuditRun(models.Model):
                 f"moved to {self.report_state!r}"
             )
         self.report_state = new_state
-        self.sending_since = None
+        if not is_failed_send_rollback:
+            self.sending_since = None
 
     @property
     def send_is_stranded(self) -> bool:
@@ -491,6 +507,18 @@ class AuditRun(models.Model):
             return False
         return timezone.now() > self.sending_since + timedelta(
             seconds=SEND_STRANDED_SECONDS
+        )
+
+    @property
+    def send_failed(self) -> bool:
+        """
+        `approved` with a non-null `sending_since` means exactly one thing: a
+        send was attempted and rolled back on failure. A fresh approval never
+        sets `sending_since`, so this can't false-positive on a normal queue.
+        """
+        return (
+            self.report_state == AuditRun.ReportState.APPROVED
+            and self.sending_since is not None
         )
 
     def enqueue_send(self):

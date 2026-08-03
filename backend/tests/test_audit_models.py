@@ -322,6 +322,33 @@ def test_report_transition_is_compare_and_set(installation, default_suite):
 
 
 @pytest.mark.django_db
+def test_rollback_from_sending_preserves_sending_since(installation, default_suite):
+    """The failed-send signal send_failed reads must survive the rollback."""
+    run = _run(installation, default_suite, AuditRun.ReportState.SENDING)
+    since = timezone.now()
+    run.sending_since = since
+    run.save(update_fields=["sending_since"])
+    run.transition_report_to(AuditRun.ReportState.APPROVED)
+    run.refresh_from_db()
+    assert run.report_state == AuditRun.ReportState.APPROVED
+    assert run.sending_since == since
+    assert run.send_failed is True
+
+
+@pytest.mark.django_db
+def test_fresh_approval_leaves_sending_since_null_and_not_flagged(
+    installation, default_suite
+):
+    """A normal admin approval (awaiting_approval -> approved) must not be
+    mistaken for a failed-send rollback."""
+    run = _run(installation, default_suite, AuditRun.ReportState.AWAITING_APPROVAL)
+    run.transition_report_to(AuditRun.ReportState.APPROVED)
+    run.refresh_from_db()
+    assert run.sending_since is None
+    assert run.send_failed is False
+
+
+@pytest.mark.django_db
 def test_send_is_stranded_false_for_fresh_sending(installation, default_suite):
     run = _run(installation, default_suite, AuditRun.ReportState.SENDING)
     run.sending_since = timezone.now()
@@ -447,3 +474,51 @@ def test_rejected_report_does_not_count_as_outstanding(installation, default_sui
         report_state=AuditRun.ReportState.REJECTED
     )
     assert job.has_outstanding_runs is False
+
+
+@pytest.mark.django_db
+def test_approved_report_counts_as_outstanding(installation, default_suite):
+    """Queued for delivery — the clone must not be released yet."""
+    job = _ready_job_with_clone(installation)
+    run = AuditRun.objects.create(
+        job=job, suite=default_suite, status=AuditRun.Status.COMPLETED
+    )
+    AuditRun.objects.filter(pk=run.pk).update(
+        report_state=AuditRun.ReportState.APPROVED
+    )
+    assert job.has_outstanding_runs is True
+
+
+@pytest.mark.django_db
+def test_sending_report_counts_as_outstanding(installation, default_suite):
+    """A worker holds this run right now — the clone must not be yanked."""
+    job = _ready_job_with_clone(installation)
+    run = AuditRun.objects.create(
+        job=job, suite=default_suite, status=AuditRun.Status.COMPLETED
+    )
+    AuditRun.objects.filter(pk=run.pk).update(
+        report_state=AuditRun.ReportState.SENDING
+    )
+    assert job.has_outstanding_runs is True
+
+
+@pytest.mark.django_db
+def test_approving_one_of_two_reports_leaves_job_ready(installation, default_suite):
+    """Two reports approved back-to-back: closing on the first must not strand
+    the clone out from under the second, still-approved, run."""
+    job = _ready_job_with_clone(installation)
+    run1 = AuditRun.objects.create(
+        job=job, suite=default_suite, status=AuditRun.Status.COMPLETED
+    )
+    run2 = AuditRun.objects.create(
+        job=job, suite=default_suite, status=AuditRun.Status.COMPLETED
+    )
+    AuditRun.objects.filter(pk=run1.pk).update(report_state=AuditRun.ReportState.SENT)
+    AuditRun.objects.filter(pk=run2.pk).update(
+        report_state=AuditRun.ReportState.APPROVED
+    )
+    assert AuditJob.maybe_cleanup_sources(job.pk) is False
+    job.refresh_from_db()
+    assert job.state == AuditJob.State.READY
+    run2.refresh_from_db()
+    assert run2.report_state == AuditRun.ReportState.APPROVED

@@ -1,11 +1,13 @@
+from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
 from django.contrib.admin.sites import site
 from django.core.exceptions import PermissionDenied
+from django.utils import timezone
 
 from audit.admin import AuditJobAdmin, AuditRunAdmin
-from audit.models import AuditAgent, AuditJob, AuditRun, AuditSuite
+from audit.models import SEND_STRANDED_SECONDS, AuditAgent, AuditJob, AuditRun, AuditSuite
 from github_app.models import Installation
 
 
@@ -237,3 +239,57 @@ def test_ready_job_awaiting_approval_does_not_need_attention(installation, suite
     admin_obj = AuditJobAdmin(AuditJob, site)
     run = _run(installation, suite, AuditRun.ReportState.AWAITING_APPROVAL)
     assert admin_obj.needs_attention(run.job) is False
+
+
+@pytest.mark.django_db
+def test_has_reset_stranded_send_permission_false_until_stranded(
+    installation, suite
+):
+    admin_obj = AuditRunAdmin(AuditRun, site)
+    run = _run(installation, suite, AuditRun.ReportState.SENDING)
+    run.sending_since = timezone.now()
+    run.save(update_fields=["sending_since"])
+    assert admin_obj.has_reset_stranded_send_permission(None, run.pk) is False
+
+
+@pytest.mark.django_db
+def test_has_reset_stranded_send_permission_true_once_stranded(installation, suite):
+    admin_obj = AuditRunAdmin(AuditRun, site)
+    run = _run(installation, suite, AuditRun.ReportState.SENDING)
+    run.sending_since = timezone.now() - timedelta(seconds=SEND_STRANDED_SECONDS + 1)
+    run.save(update_fields=["sending_since"])
+    assert admin_obj.has_reset_stranded_send_permission(None, run.pk) is True
+
+
+@pytest.mark.django_db
+def test_has_reset_stranded_send_permission_false_for_missing_object():
+    admin_obj = AuditRunAdmin(AuditRun, site)
+    assert admin_obj.has_reset_stranded_send_permission(None, 999999) is False
+
+
+@pytest.mark.django_db
+def test_run_needs_attention_when_send_is_stranded(installation, suite):
+    admin_obj = AuditRunAdmin(AuditRun, site)
+    run = _run(installation, suite, AuditRun.ReportState.SENDING)
+    run.sending_since = timezone.now() - timedelta(seconds=SEND_STRANDED_SECONDS + 1)
+    run.save(update_fields=["sending_since"])
+    assert admin_obj.needs_attention(run) is True
+
+
+@pytest.mark.django_db
+def test_run_needs_attention_when_send_failed(installation, suite):
+    """A failed-send rollback (approved with sending_since still set) must
+    surface in the admin exactly like the other stuck states."""
+    admin_obj = AuditRunAdmin(AuditRun, site)
+    run = _run(installation, suite, AuditRun.ReportState.SENDING)
+    run.sending_since = timezone.now()
+    run.save(update_fields=["sending_since"])
+    run.transition_report_to(AuditRun.ReportState.APPROVED)
+    assert admin_obj.needs_attention(run) is True
+
+
+@pytest.mark.django_db
+def test_run_fresh_approval_does_not_need_attention(installation, suite):
+    admin_obj = AuditRunAdmin(AuditRun, site)
+    run = _run(installation, suite, AuditRun.ReportState.APPROVED)
+    assert admin_obj.needs_attention(run) is False

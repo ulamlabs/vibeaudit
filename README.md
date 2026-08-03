@@ -166,9 +166,13 @@ it back to `approved` for a retry via **Resend report**.
 
 Cloned sources survive until every report on the job is resolved, so a rejected
 report can be followed by a new run with a different suite — add one from the
-AuditRun admin while the job is still `Ready`. Once no run on the job is still
-pending/running or awaiting report approval, the job is closed and its clone
-deleted.
+AuditRun admin while the job is still `Ready`. Automatic close/cleanup only
+happens once a report is **successfully sent** and nothing else is
+outstanding (`maybe_cleanup_sources` runs solely from `send_approved_report`).
+A run that failed, or a report that was rejected, deliberately leaves the job
+`Ready` holding its clone — staff can re-run with another suite or click
+**Delete sources** manually — and such a job is flagged **Needs attention**
+in the meantime.
 
 Operator notes:
 

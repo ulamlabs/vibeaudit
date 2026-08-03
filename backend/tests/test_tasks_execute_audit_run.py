@@ -2,6 +2,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 import pytest
+from django.core import mail
 from django.test import override_settings
 from langgraph.errors import GraphRecursionError
 
@@ -200,11 +201,13 @@ def test_completed_run_notifies_staff_not_submitter(installation, suite):
     with (
         patch("audit.ai.runner.run_pipeline", return_value=_result()),
         patch("audit.tasks.send_report_approval_notification") as notify,
-        patch("audit.email.send_report_email") as send_report,
+        patch("audit.tasks.send_report_email") as send_report,
     ):
         execute_audit_run(run.pk)
     notify.assert_called_once()
     send_report.assert_not_called()
+    # Backstop: survives future changes to import style in tasks.py.
+    assert mail.outbox == []
 
 
 @pytest.mark.django_db

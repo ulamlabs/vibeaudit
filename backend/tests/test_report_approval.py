@@ -176,7 +176,8 @@ def test_send_approved_report_sends_marks_sent_and_cleans_up(installation, suite
 
 @pytest.mark.django_db
 def test_send_failure_leaves_report_approved(installation, suite):
-    """A failed send must stay retryable via the admin's Resend action."""
+    """A failed send must stay retryable via the admin's Resend action, and
+    stay flagged (sending_since preserved) until someone retries it."""
     run = _approved_run(installation, suite)
     with (
         patch("audit.tasks.send_report_email", side_effect=Exception("smtp down")),
@@ -186,7 +187,8 @@ def test_send_failure_leaves_report_approved(installation, suite):
     cleanup.assert_not_called()
     run.refresh_from_db()
     assert run.report_state == AuditRun.ReportState.APPROVED
-    assert run.sending_since is None
+    assert run.sending_since is not None
+    assert run.send_failed is True
 
 
 @pytest.mark.django_db

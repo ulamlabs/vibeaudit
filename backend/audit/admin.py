@@ -224,8 +224,10 @@ class AuditRunAdmin(ModelAdmin):
     def needs_attention(self, obj):
         # RUNNING past the hard time limit — the worker likely died; use
         # "Terminate execution". Or `sending` past the send window — the worker
-        # died mid-send; use "Reset to approved" then Resend.
-        return obj.is_overdue or obj.send_is_stranded
+        # died mid-send; use "Reset to approved" then Resend. Or `approved`
+        # with a rollback's sending_since still set — the send failed and
+        # nothing retries it automatically; use "Resend report".
+        return obj.is_overdue or obj.send_is_stranded or obj.send_failed
 
     @admin.display(description="Report")
     def report_html(self, obj):
