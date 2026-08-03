@@ -180,7 +180,7 @@ class AuditJob(models.Model):
         """
         with transaction.atomic():
             job = cls.objects.select_for_update().get(pk=job_id)
-            if job.keep_sources or job.state != cls.State.READY:
+            if job.keep_sources or not job.is_runnable:
                 return False
             if job.has_outstanding_runs:
                 return False
@@ -428,6 +428,13 @@ class AuditRun(models.Model):
         help_text="Set when a worker claims this report for sending; cleared on any "
         "transition out of 'sending'. Used to spot a worker that died mid-send.",
     )
+    approved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Set on a fresh approval (awaiting_approval -> approved); cleared on "
+        "transitions out of the approval stage, except a failed-send rollback, which "
+        "preserves it. Used to spot a queued send whose message was lost.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
@@ -490,9 +497,22 @@ class AuditRun(models.Model):
             self.report_state == AuditRun.ReportState.SENDING
             and new_state == AuditRun.ReportState.APPROVED
         )
+        # A fresh approval stamps approved_at; every other transition clears it
+        # (approved_at only means something for a report currently sitting at
+        # 'approved') EXCEPT the failed-send rollback, which preserves it like
+        # sending_since — it's already flagged via send_failed, so it must not
+        # also silently lose when it was first approved.
+        is_fresh_approval = (
+            self.report_state == AuditRun.ReportState.AWAITING_APPROVAL
+            and new_state == AuditRun.ReportState.APPROVED
+        )
         update_fields = {"report_state": new_state}
         if not is_failed_send_rollback:
             update_fields["sending_since"] = None
+        if is_fresh_approval:
+            update_fields["approved_at"] = timezone.now()
+        elif not is_failed_send_rollback:
+            update_fields["approved_at"] = None
         updated = AuditRun.objects.filter(
             pk=self.pk, report_state=self.report_state
         ).update(**update_fields)
@@ -505,6 +525,8 @@ class AuditRun(models.Model):
         self.report_state = new_state
         if not is_failed_send_rollback:
             self.sending_since = None
+        if "approved_at" in update_fields:
+            self.approved_at = update_fields["approved_at"]
 
     @property
     def send_is_stranded(self) -> bool:
@@ -529,6 +551,27 @@ class AuditRun(models.Model):
         return (
             self.report_state == AuditRun.ReportState.APPROVED
             and self.sending_since is not None
+        )
+
+    @property
+    def send_never_claimed(self) -> bool:
+        """
+        Lazily detect an approval whose queue message was lost (broker restart,
+        etc.): `approved`, never claimed for sending (sending_since still null),
+        past a generous window since approval. Checked on read — no beat
+        schedule needed, mirroring is_overdue and send_is_stranded. Reuses
+        SEND_STRANDED_SECONDS rather than a second tunable — both windows mean
+        "this long stuck partway through a send is anomalous". Remedy: the
+        admin "Resend report" action.
+        """
+        if (
+            self.report_state != AuditRun.ReportState.APPROVED
+            or self.sending_since is not None
+            or not self.approved_at
+        ):
+            return False
+        return timezone.now() > self.approved_at + timedelta(
+            seconds=SEND_STRANDED_SECONDS
         )
 
     def enqueue_send(self):

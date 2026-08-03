@@ -1,4 +1,5 @@
 import logging
+from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
@@ -11,7 +12,7 @@ from audit.email import (
     send_report_email,
     send_run_failure_notification,
 )
-from audit.models import AuditAgent, AuditJob, AuditRun, AuditSuite
+from audit.models import SEND_STRANDED_SECONDS, AuditAgent, AuditJob, AuditRun, AuditSuite
 from github_app.models import Installation
 
 
@@ -259,3 +260,95 @@ def test_send_approved_report_keeps_job_open_while_another_awaits(
         send_approved_report(run.pk)
     run.job.refresh_from_db()
     assert run.job.state == AuditJob.State.READY
+
+
+def _fresh_approval(installation, suite):
+    """A run that just went awaiting_approval -> approved via the real
+    transition, so approved_at is stamped the way production code stamps it."""
+    run = _completed_run(installation, suite, markdown="# Report")
+    AuditRun.objects.filter(pk=run.pk).update(
+        report_state=AuditRun.ReportState.AWAITING_APPROVAL
+    )
+    run.refresh_from_db()
+    run.transition_report_to(AuditRun.ReportState.APPROVED)
+    return run
+
+
+@pytest.mark.django_db
+def test_fresh_approval_stamps_approved_at(installation, suite):
+    run = _fresh_approval(installation, suite)
+    assert run.approved_at is not None
+    assert run.sending_since is None
+    assert run.send_failed is False
+    assert run.send_never_claimed is False
+
+
+@pytest.mark.django_db
+def test_send_never_claimed_true_once_stale(installation, suite):
+    run = _fresh_approval(installation, suite)
+    AuditRun.objects.filter(pk=run.pk).update(
+        approved_at=timezone.now() - timedelta(seconds=SEND_STRANDED_SECONDS + 1)
+    )
+    run.refresh_from_db()
+    assert run.send_never_claimed is True
+
+
+@pytest.mark.django_db
+def test_send_never_claimed_false_while_fresh(installation, suite):
+    run = _fresh_approval(installation, suite)
+    assert run.send_never_claimed is False
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "report_state",
+    [
+        "",
+        AuditRun.ReportState.AWAITING_APPROVAL,
+        AuditRun.ReportState.SENDING,
+        AuditRun.ReportState.SENT,
+        AuditRun.ReportState.REJECTED,
+    ],
+)
+def test_send_never_claimed_false_for_other_report_states(
+    installation, suite, report_state
+):
+    """A stale approved_at only means something while report_state is
+    'approved' -- any other state is out of scope for this property."""
+    run = _fresh_approval(installation, suite)
+    AuditRun.objects.filter(pk=run.pk).update(
+        report_state=report_state,
+        approved_at=timezone.now() - timedelta(seconds=SEND_STRANDED_SECONDS + 1),
+    )
+    run.refresh_from_db()
+    assert run.send_never_claimed is False
+
+
+@pytest.mark.django_db
+def test_send_never_claimed_false_when_sending_since_set(installation, suite):
+    """approved + sending_since set is the send_failed case; send_never_claimed
+    must not also fire for it."""
+    run = _fresh_approval(installation, suite)
+    AuditRun.objects.filter(pk=run.pk).update(
+        approved_at=timezone.now() - timedelta(seconds=SEND_STRANDED_SECONDS + 1),
+        sending_since=timezone.now(),
+    )
+    run.refresh_from_db()
+    assert run.send_failed is True
+    assert run.send_never_claimed is False
+
+
+@pytest.mark.django_db
+def test_failed_send_rollback_preserves_approved_at(installation, suite):
+    """The rollback (sending -> approved) must not silently lose the original
+    approval timestamp, even though it's not currently read for anything while
+    sending_since stays set (send_failed already owns that state)."""
+    run = _fresh_approval(installation, suite)
+    approved_at = run.approved_at
+    AuditRun.objects.filter(pk=run.pk).update(
+        report_state=AuditRun.ReportState.SENDING, sending_since=timezone.now()
+    )
+    run.refresh_from_db()
+    run.transition_report_to(AuditRun.ReportState.APPROVED)
+    assert run.approved_at == approved_at
+    assert run.sending_since is not None

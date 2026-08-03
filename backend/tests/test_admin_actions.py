@@ -310,6 +310,18 @@ def test_run_fresh_approval_does_not_need_attention(installation, suite):
     assert admin_obj.needs_attention(run) is False
 
 
+@pytest.mark.django_db
+def test_run_needs_attention_when_send_never_claimed(installation, suite):
+    """An approved report whose queue message was lost (sending_since never
+    set) must surface once approved_at is stale, same as the other stuck
+    send states."""
+    admin_obj = AuditRunAdmin(AuditRun, site)
+    run = _run(installation, suite, AuditRun.ReportState.APPROVED)
+    run.approved_at = timezone.now() - timedelta(seconds=SEND_STRANDED_SECONDS + 1)
+    run.save(update_fields=["approved_at"])
+    assert admin_obj.needs_attention(run) is True
+
+
 def _make_ready_jobs(installation, n):
     """READY jobs with no runs: needs_attention must consult
     has_outstanding_runs for every one of them (is_overdue never short-
@@ -391,3 +403,30 @@ def test_needs_attention_agrees_between_annotated_and_plain_instance(
     annotated_result = admin_obj.needs_attention(annotated)
 
     assert plain_result == annotated_result
+
+
+@pytest.mark.django_db
+def test_bulk_cleanup_skips_jobs_that_cannot_be_cleaned(installation, rf):
+    """One already-closed job in the selection must not 500 the whole action
+    or stop the cleanable job(s) after it from being processed."""
+    admin_obj = AuditJobAdmin(AuditJob, site)
+    cleanable = AuditJob.objects.create(
+        installation=installation, repo_full_name="o/cleanable", email="a@b.c"
+    )
+    AuditJob.objects.filter(pk=cleanable.pk).update(state=AuditJob.State.READY)
+    already_closed = AuditJob.objects.create(
+        installation=installation, repo_full_name="o/closed", email="a@b.c"
+    )
+    AuditJob.objects.filter(pk=already_closed.pk).update(state=AuditJob.State.CLOSED)
+
+    queryset = AuditJob.objects.filter(pk__in=[cleanable.pk, already_closed.pk])
+    with patch.object(AuditJobAdmin, "message_user") as message_user:
+        admin_obj.bulk_cleanup(rf.get("/"), queryset)
+
+    cleanable.refresh_from_db()
+    already_closed.refresh_from_db()
+    assert cleanable.state == AuditJob.State.CLOSED
+    assert already_closed.state == AuditJob.State.CLOSED
+
+    message = message_user.call_args[0][1]
+    assert "Sources deleted for 1 job(s); skipped 1" in message

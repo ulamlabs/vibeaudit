@@ -26,12 +26,17 @@ class Migration(migrations.Migration):
             name='report_state',
             field=models.CharField(blank=True, choices=[('awaiting_approval', 'Awaiting Approval'), ('approved', 'Approved'), ('sending', 'Sending'), ('sent', 'Sent'), ('rejected', 'Rejected')], default='', help_text="Delivery stage of this run's report. Blank until the run completes; a completed report waits at 'awaiting_approval' until a staff member approves or rejects it.", max_length=32),
         ),
-        migrations.RunPython(mark_existing_reports_sent, clear_report_state),
         migrations.AddField(
             model_name='auditrun',
             name='sending_since',
             field=models.DateTimeField(blank=True, help_text="Set when a worker claims this report for sending; cleared on any transition out of 'sending'. Used to spot a worker that died mid-send.", null=True),
         ),
+        migrations.AddField(
+            model_name='auditrun',
+            name='approved_at',
+            field=models.DateTimeField(blank=True, help_text="Set on a fresh approval (awaiting_approval -> approved); cleared on transitions out of the approval stage, except a failed-send rollback, which preserves it. Used to spot a queued send whose message was lost.", null=True),
+        ),
+        migrations.RunPython(mark_existing_reports_sent, clear_report_state),
         migrations.AlterField(
             model_name='auditjob',
             name='keep_sources',

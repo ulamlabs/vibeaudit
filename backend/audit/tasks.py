@@ -223,7 +223,9 @@ def send_approved_report(run_id: int) -> None:
     claimed = AuditRun.objects.filter(
         pk=run_id, report_state=AuditRun.ReportState.APPROVED
     ).update(
-        report_state=AuditRun.ReportState.SENDING, sending_since=timezone.now()
+        report_state=AuditRun.ReportState.SENDING,
+        sending_since=timezone.now(),
+        approved_at=None,
     )
     if not claimed:
         logger.warning(

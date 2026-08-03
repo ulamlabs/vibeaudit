@@ -227,8 +227,15 @@ class AuditRunAdmin(ModelAdmin):
         # "Terminate execution". Or `sending` past the send window — the worker
         # died mid-send; use "Reset to approved" then Resend. Or `approved`
         # with a rollback's sending_since still set — the send failed and
-        # nothing retries it automatically; use "Resend report".
-        return obj.is_overdue or obj.send_is_stranded or obj.send_failed
+        # nothing retries it automatically; use "Resend report". Or `approved`
+        # with sending_since never set, past the window — the queue message
+        # was lost; use "Resend report".
+        return (
+            obj.is_overdue
+            or obj.send_is_stranded
+            or obj.send_failed
+            or obj.send_never_claimed
+        )
 
     @admin.display(description="Report")
     def report_html(self, obj):
@@ -558,16 +565,25 @@ class AuditJobAdmin(ModelAdmin):
 
     @admin.action(description="Delete sources for selected jobs")
     def bulk_cleanup(self, request, queryset):
-        count = 0
+        cleaned = 0
+        skipped = 0
         for job in queryset:
             running_runs = job.runs.filter(status=AuditRun.Status.RUNNING)
             for run in running_runs:
                 if run.celery_task_id:
                     current_app.control.revoke(run.celery_task_id, terminate=True)
                     run.terminate("Job cleanup triggered while running")
-            job.cleanup()
-            count += 1
-        self.message_user(request, f"Sources deleted for {count} job(s).")
+            try:
+                job.cleanup()
+            except ValueError:
+                skipped += 1
+            else:
+                cleaned += 1
+        self.message_user(
+            request,
+            f"Sources deleted for {cleaned} job(s); skipped {skipped} that "
+            "cannot be cleaned up (not in a closeable state).",
+        )
 
     def _redirect_to_change(self, request, object_id):
         return redirect(reverse("admin:audit_auditjob_change", args=[object_id]))
