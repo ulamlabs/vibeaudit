@@ -223,8 +223,9 @@ class AuditRunAdmin(ModelAdmin):
     @admin.display(description="Needs attention", boolean=True)
     def needs_attention(self, obj):
         # RUNNING past the hard time limit — the worker likely died; use
-        # "Terminate execution" to fail the run and unstick the job.
-        return obj.is_overdue
+        # "Terminate execution". Or `sending` past the send window — the worker
+        # died mid-send; use "Reset to approved" then Resend.
+        return obj.is_overdue or obj.send_is_stranded
 
     @admin.display(description="Report")
     def report_html(self, obj):
@@ -246,7 +247,49 @@ class AuditRunAdmin(ModelAdmin):
     def _redirect_to_change(self, object_id):
         return redirect(reverse("admin:audit_auditrun_change", args=[object_id]))
 
-    @action(description="Approve & send", url_path="approve-report")
+    def _run_field(self, object_id, field):
+        return (
+            AuditRun.objects.filter(pk=object_id)
+            .values_list(field, flat=True)
+            .first()
+        )
+
+    def _awaits_decision(self, object_id) -> bool:
+        return (
+            self._run_field(object_id, "report_state")
+            == AuditRun.ReportState.AWAITING_APPROVAL
+        )
+
+    # Unfold renders a detail action only when its has_<name>_permission hook
+    # passes. Admin access is already gated on is_staff, so these are not
+    # authorization checks — they answer whether the button means anything for
+    # this object's current state.
+    def has_approve_report_permission(self, request, object_id=None):
+        return self._awaits_decision(object_id)
+
+    def has_reject_report_permission(self, request, object_id=None):
+        return self._awaits_decision(object_id)
+
+    def has_resend_report_permission(self, request, object_id=None):
+        return (
+            self._run_field(object_id, "report_state") == AuditRun.ReportState.APPROVED
+        )
+
+    # Only offered once the send is provably stranded — showing it during a
+    # healthy in-flight send would let an admin reset a run the worker is about
+    # to mark sent, and the worker's transition would then fail.
+    def has_reset_stranded_send_permission(self, request, object_id=None):
+        run = AuditRun.objects.filter(pk=object_id).first()
+        return run is not None and run.send_is_stranded
+
+    def has_terminate_run_permission(self, request, object_id=None):
+        return self._run_field(object_id, "status") == AuditRun.Status.RUNNING
+
+    @action(
+        description="Approve & send",
+        url_path="approve-report",
+        permissions=["approve_report"],
+    )
     def approve_report(self, request, object_id):
         run = AuditRun.objects.get(pk=object_id)
         try:
@@ -258,7 +301,11 @@ class AuditRunAdmin(ModelAdmin):
             self.message_user(request, f"Report for run #{run.pk} queued for sending.")
         return self._redirect_to_change(object_id)
 
-    @action(description="Reject report", url_path="reject-report")
+    @action(
+        description="Reject report",
+        url_path="reject-report",
+        permissions=["reject_report"],
+    )
     def reject_report(self, request, object_id):
         run = AuditRun.objects.get(pk=object_id)
         try:
@@ -274,7 +321,11 @@ class AuditRunAdmin(ModelAdmin):
             )
         return self._redirect_to_change(object_id)
 
-    @action(description="Resend report", url_path="resend-report")
+    @action(
+        description="Resend report",
+        url_path="resend-report",
+        permissions=["resend_report"],
+    )
     def resend_report(self, request, object_id):
         run = AuditRun.objects.get(pk=object_id)
         if run.report_state != AuditRun.ReportState.APPROVED:
@@ -289,7 +340,11 @@ class AuditRunAdmin(ModelAdmin):
             self.message_user(request, f"Report for run #{run.pk} re-queued.")
         return self._redirect_to_change(object_id)
 
-    @action(description="Reset to approved", url_path="reset-send")
+    @action(
+        description="Reset to approved",
+        url_path="reset-send",
+        permissions=["reset_stranded_send"],
+    )
     def reset_stranded_send(self, request, object_id):
         """Unstick a report whose worker died mid-send (stuck `sending`)."""
         run = AuditRun.objects.get(pk=object_id)
@@ -305,7 +360,11 @@ class AuditRunAdmin(ModelAdmin):
             )
         return self._redirect_to_change(object_id)
 
-    @action(description="Terminate execution", url_path="terminate")
+    @action(
+        description="Terminate execution",
+        url_path="terminate",
+        permissions=["terminate_run"],
+    )
     def terminate_run(self, request, object_id):
         run = AuditRun.objects.get(pk=object_id)
         if run.status != AuditRun.Status.RUNNING:
@@ -374,11 +433,41 @@ class AuditJobAdmin(ModelAdmin):
 
     @admin.display(description="Needs attention", boolean=True)
     def needs_attention(self, obj):
-        # CLONING past the task hard time limit — the clone worker likely
-        # died; use "Mark failed" to unstick the job (and the installation).
-        return obj.is_overdue
+        # CLONING past the task hard time limit — the clone worker likely died;
+        # use "Mark failed". Or READY with no run left to act on: the job is
+        # holding its clone until staff re-run it or delete sources, and until
+        # then the submitter's funnel still counts it as active.
+        return obj.is_overdue or (
+            obj.state == AuditJob.State.READY and not obj.has_outstanding_runs
+        )
 
-    @action(description="Approve", url_path="approve")
+    # Unfold renders a detail action only when its has_<name>_permission hook
+    # passes. Admin access is already gated on is_staff, so these are not
+    # authorization checks — they answer whether the transition is legal from
+    # the object's current state, per VALID_TRANSITIONS.
+    def _can_transition(self, object_id, target) -> bool:
+        state = (
+            AuditJob.objects.filter(pk=object_id)
+            .values_list("state", flat=True)
+            .first()
+        )
+        if state is None:
+            return False
+        return target in AuditJob.VALID_TRANSITIONS.get(state, [])
+
+    def has_approve_job_permission(self, request, object_id=None):
+        return self._can_transition(object_id, AuditJob.State.READY)
+
+    def has_reject_job_permission(self, request, object_id=None):
+        return self._can_transition(object_id, AuditJob.State.REJECTED)
+
+    def has_mark_failed_permission(self, request, object_id=None):
+        return self._can_transition(object_id, AuditJob.State.FAILED)
+
+    def has_cleanup_job_permission(self, request, object_id=None):
+        return self._can_transition(object_id, AuditJob.State.CLOSED)
+
+    @action(description="Approve", url_path="approve", permissions=["approve_job"])
     def approve_job(self, request, object_id):
         job = AuditJob.objects.get(pk=object_id)
         try:
@@ -389,7 +478,7 @@ class AuditJobAdmin(ModelAdmin):
             self.message_user(request, f"Job #{job.pk} approved; run queued.")
         return self._redirect_to_change(request, object_id)
 
-    @action(description="Reject", url_path="reject")
+    @action(description="Reject", url_path="reject", permissions=["reject_job"])
     def reject_job(self, request, object_id):
         job = AuditJob.objects.get(pk=object_id)
         try:
@@ -400,7 +489,9 @@ class AuditJobAdmin(ModelAdmin):
             self.message_user(request, f"Job #{job.pk} rejected.", messages.WARNING)
         return self._redirect_to_change(request, object_id)
 
-    @action(description="Mark failed", url_path="mark-failed")
+    @action(
+        description="Mark failed", url_path="mark-failed", permissions=["mark_failed"]
+    )
     def mark_failed(self, request, object_id):
         """Unstick a job whose clone worker died (stuck CLONING)."""
         job = AuditJob.objects.get(pk=object_id)
@@ -415,7 +506,9 @@ class AuditJobAdmin(ModelAdmin):
             )
         return self._redirect_to_change(request, object_id)
 
-    @action(description="Delete sources", url_path="cleanup")
+    @action(
+        description="Delete sources", url_path="cleanup", permissions=["cleanup_job"]
+    )
     def cleanup_job(self, request, object_id):
         job = AuditJob.objects.get(pk=object_id)
 
