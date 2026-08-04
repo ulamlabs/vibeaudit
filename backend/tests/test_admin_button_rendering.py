@@ -68,6 +68,27 @@ def _run(installation, suite, report_state="", status=AuditRun.Status.COMPLETED)
     return run
 
 
+# Every Unfold admin page pulls hashed assets (its own fonts, plus
+# AuditRunAdmin.Media's audit/md_preview.css). Under the whitenoise
+# ManifestStaticFilesStorage used in production settings, rendering those
+# <link>s requires a collected staticfiles manifest, which the test run doesn't
+# produce. Swap in the plain (non-manifest) storage for every test here —
+# irrelevant to what we're verifying, which is action-button wiring, not asset
+# hashing. Autouse rather than per-helper: applying it in only one of the two
+# render helpers let these tests pass locally (where a stale backend/staticfiles/
+# manifest exists) and fail in CI, where it doesn't.
+_NON_MANIFEST_STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+}
+
+
+@pytest.fixture(autouse=True)
+def non_manifest_storages():
+    with override_settings(STORAGES=_NON_MANIFEST_STORAGES):
+        yield
+
+
 def _job_change_html(client, job):
     url = reverse("admin:audit_auditjob_change", args=[job.pk])
     response = client.get(url)
@@ -77,22 +98,9 @@ def _job_change_html(client, job):
     return response.content.decode()
 
 
-# AuditRunAdmin.Media references a real static asset (audit/md_preview.css).
-# Under the whitenoise ManifestStaticFilesStorage used in production settings,
-# rendering that <link> requires a collected staticfiles manifest, which the
-# test run doesn't produce. Swap in the plain (non-manifest) storage just for
-# rendering these pages — irrelevant to what we're verifying here, which is
-# action-button wiring, not asset hashing.
-_NON_MANIFEST_STORAGES = {
-    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
-    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
-}
-
-
 def _run_change_html(client, run):
     url = reverse("admin:audit_auditrun_change", args=[run.pk])
-    with override_settings(STORAGES=_NON_MANIFEST_STORAGES):
-        response = client.get(url)
+    response = client.get(url)
     assert response.status_code == 200, (
         f"unexpected status {response.status_code} for run change page"
     )
