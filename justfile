@@ -73,6 +73,8 @@ compile-email:
     npx mjml backend/audit/templates/email/src/report_email.mjml -o backend/audit/templates/email/report_email.html
     npx mjml backend/audit/templates/email/src/failure_email.mjml -o backend/audit/templates/email/failure_email.html
     npx mjml backend/audit/templates/email/src/new_submission_email.mjml -o backend/audit/templates/email/new_submission_email.html
+    npx mjml backend/audit/templates/email/src/report_approval_email.mjml -o backend/audit/templates/email/report_approval_email.html
+    npx mjml backend/audit/templates/email/src/run_failure_email.mjml -o backend/audit/templates/email/run_failure_email.html
 
 # Run backend tests (pytest-style)
 test-be:

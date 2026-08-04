@@ -1,5 +1,5 @@
 import shutil
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from django.conf import settings
@@ -12,6 +12,10 @@ from django.utils import timezone
 # Slack on top of a task's hard time limit before a stuck object counts as
 # overdue (the hard limit SIGKILLs the worker, skipping failure handling).
 OVERDUE_GRACE_SECONDS = 120
+
+# A send is one PDF render plus one SMTP round trip; a report still `sending`
+# well past that lost its worker before it could roll back or finish.
+SEND_STRANDED_SECONDS = 900
 
 
 class AuditJob(models.Model):
@@ -57,9 +61,9 @@ class AuditJob(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     keep_sources = models.BooleanField(
         default=False,
-        help_text="Keep the cloned sources after a run so the job can be re-run. "
-        "Defaults False (external jobs are cleaned up after one run); only staff "
-        "submitters may opt in to keeping sources.",
+        help_text="Never auto-delete the cloned sources. Off (default) means the "
+        "clone is removed once every report on this job has been approved and "
+        "sent; only staff submitters may opt in to keeping sources.",
     )
 
     class Meta:
@@ -141,6 +145,47 @@ class AuditJob(models.Model):
     def cleanup(self) -> None:
         self.transition_to(self.State.CLOSED)
         self.delete_clone()
+
+    @staticmethod
+    def outstanding_runs_q() -> models.Q:
+        """The condition for 'this run still needs the clone or a human decision'.
+
+        Single source of truth shared by has_outstanding_runs and the admin's
+        annotated queryset — maybe_cleanup_sources decides whether to delete a
+        customer's cloned sources based on this, so the two call sites must
+        never drift into independently-written copies of the condition.
+        """
+        return models.Q(
+            status__in=[AuditRun.Status.PENDING, AuditRun.Status.RUNNING]
+        ) | models.Q(
+            report_state__in=[
+                AuditRun.ReportState.AWAITING_APPROVAL,
+                AuditRun.ReportState.APPROVED,
+                AuditRun.ReportState.SENDING,
+            ]
+        )
+
+    @property
+    def has_outstanding_runs(self) -> bool:
+        """True while some run still needs the clone or a human decision."""
+        return self.runs.filter(self.outstanding_runs_q()).exists()
+
+    @classmethod
+    def maybe_cleanup_sources(cls, job_id: int) -> bool:
+        """
+        Close the job and drop its clone once nothing needs it any more.
+        Locks the job row: two reports approved at the same instant would
+        otherwise each read the other as outstanding and both skip cleanup,
+        stranding the clone on disk forever.
+        """
+        with transaction.atomic():
+            job = cls.objects.select_for_update().get(pk=job_id)
+            if job.keep_sources or not job.is_runnable:
+                return False
+            if job.has_outstanding_runs:
+                return False
+            job.cleanup()
+            return True
 
     def __str__(self):
         return f"AuditJob #{self.pk} ({self.repo_full_name} - {self.state})"
@@ -326,6 +371,23 @@ class AuditRun(models.Model):
         COMPLETED = "completed", "Completed"
         FAILED = "failed", "Failed"
 
+    class ReportState(models.TextChoices):
+        AWAITING_APPROVAL = "awaiting_approval", "Awaiting Approval"
+        APPROVED = "approved", "Approved"
+        SENDING = "sending", "Sending"
+        SENT = "sent", "Sent"
+        REJECTED = "rejected", "Rejected"
+
+    # Blank (the default) means "no report stage" — a run that has not completed.
+    # `sending` is claimed atomically before the send so two workers cannot both
+    # deliver; it rolls back to `approved` when the send fails, which is what
+    # makes `approved` mean "retry me" and keeps the Resend action honest.
+    REPORT_VALID_TRANSITIONS: dict[str, list[str]] = {
+        ReportState.AWAITING_APPROVAL: [ReportState.APPROVED, ReportState.REJECTED],
+        ReportState.APPROVED: [ReportState.SENDING],
+        ReportState.SENDING: [ReportState.SENT, ReportState.APPROVED],
+    }
+
     job = models.ForeignKey(AuditJob, related_name="runs", on_delete=models.CASCADE)
     suite = models.ForeignKey(AuditSuite, on_delete=models.PROTECT)
     status = models.CharField(
@@ -348,6 +410,30 @@ class AuditRun(models.Model):
     )
     celery_task_id = models.CharField(
         max_length=36, blank=True, help_text="Celery task ID for tracking/revoking."
+    )
+    report_state = models.CharField(
+        max_length=32,
+        choices=ReportState.choices,
+        blank=True,
+        default="",
+        help_text=(
+            "Delivery stage of this run's report. Blank until the run completes; "
+            "a completed report waits at 'awaiting_approval' until a staff member "
+            "approves or rejects it."
+        ),
+    )
+    sending_since = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Set when a worker claims this report for sending; cleared on any "
+        "transition out of 'sending'. Used to spot a worker that died mid-send.",
+    )
+    approved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Set on a fresh approval (awaiting_approval -> approved); cleared on "
+        "transitions out of the approval stage, except a failed-send rollback, which "
+        "preserves it. Used to spot a queued send whose message was lost.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True)
@@ -394,6 +480,105 @@ class AuditRun(models.Model):
         if updated:
             self.refresh_from_db(fields=list(fields.keys()))
         return bool(updated)
+
+    def transition_report_to(self, new_state: str) -> None:
+        allowed = self.REPORT_VALID_TRANSITIONS.get(self.report_state, [])
+        if new_state not in allowed:
+            raise ValueError(
+                f"Cannot transition report from {self.report_state!r} to {new_state!r}"
+            )
+        # Compare-and-set, like AuditJob.transition_to: a double-clicked Approve
+        # cannot pass the guard twice.
+        # Only send_approved_report's claim sets sending_since; every transition
+        # out of `sending` clears it EXCEPT the failed-send rollback (sending ->
+        # approved), which preserves it — that is the exact signal send_failed
+        # reads to flag "a send was attempted and failed" with no time window.
+        is_failed_send_rollback = (
+            self.report_state == AuditRun.ReportState.SENDING
+            and new_state == AuditRun.ReportState.APPROVED
+        )
+        # A fresh approval stamps approved_at; every other transition clears it
+        # (approved_at only means something for a report currently sitting at
+        # 'approved') EXCEPT the failed-send rollback, which preserves it like
+        # sending_since — it's already flagged via send_failed, so it must not
+        # also silently lose when it was first approved.
+        is_fresh_approval = (
+            self.report_state == AuditRun.ReportState.AWAITING_APPROVAL
+            and new_state == AuditRun.ReportState.APPROVED
+        )
+        update_fields: dict[str, str | datetime | None] = {"report_state": new_state}
+        if not is_failed_send_rollback:
+            update_fields["sending_since"] = None
+        if is_fresh_approval:
+            update_fields["approved_at"] = timezone.now()
+        elif not is_failed_send_rollback:
+            update_fields["approved_at"] = None
+        updated = AuditRun.objects.filter(
+            pk=self.pk, report_state=self.report_state
+        ).update(**update_fields)
+        if not updated:
+            self.refresh_from_db(fields=["report_state"])
+            raise ValueError(
+                f"Cannot transition report to {new_state!r}: run concurrently "
+                f"moved to {self.report_state!r}"
+            )
+        self.report_state = new_state
+        if not is_failed_send_rollback:
+            self.sending_since = None
+        if "approved_at" in update_fields:
+            self.approved_at = update_fields["approved_at"]
+
+    @property
+    def send_is_stranded(self) -> bool:
+        """
+        Lazily detect a worker that died mid-send: `sending` past a generous send
+        window. Checked on read — no beat schedule needed, mirroring is_overdue.
+        Remedy: the admin "Reset to approved" action.
+        """
+        if self.report_state != AuditRun.ReportState.SENDING or not self.sending_since:
+            return False
+        return timezone.now() > self.sending_since + timedelta(
+            seconds=SEND_STRANDED_SECONDS
+        )
+
+    @property
+    def send_failed(self) -> bool:
+        """
+        `approved` with a non-null `sending_since` means exactly one thing: a
+        send was attempted and rolled back on failure. A fresh approval never
+        sets `sending_since`, so this can't false-positive on a normal queue.
+        """
+        return (
+            self.report_state == AuditRun.ReportState.APPROVED
+            and self.sending_since is not None
+        )
+
+    @property
+    def send_never_claimed(self) -> bool:
+        """
+        Lazily detect an approval whose queue message was lost (broker restart,
+        etc.): `approved`, never claimed for sending (sending_since still null),
+        past a generous window since approval. Checked on read — no beat
+        schedule needed, mirroring is_overdue and send_is_stranded. Reuses
+        SEND_STRANDED_SECONDS rather than a second tunable — both windows mean
+        "this long stuck partway through a send is anomalous". Remedy: the
+        admin "Resend report" action.
+        """
+        if (
+            self.report_state != AuditRun.ReportState.APPROVED
+            or self.sending_since is not None
+            or not self.approved_at
+        ):
+            return False
+        return timezone.now() > self.approved_at + timedelta(
+            seconds=SEND_STRANDED_SECONDS
+        )
+
+    def enqueue_send(self):
+        """Queue the approved report for delivery once the current transaction commits."""
+        from audit.tasks import send_approved_report
+
+        transaction.on_commit(lambda: send_approved_report.delay(self.pk))
 
     def enqueue(self):
         """
