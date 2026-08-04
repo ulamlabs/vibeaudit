@@ -162,6 +162,27 @@ def _approved_run(installation, suite):
 
 
 @pytest.mark.django_db
+def test_enqueue_send_publishes_after_commit(
+    installation, suite, django_capture_on_commit_callbacks
+):
+    """
+    The admin action tests patch enqueue_send out and the task tests call
+    send_approved_report directly, so nothing else executes the seam between
+    them. Publishing pre-commit would let the worker claim before the row is
+    visible: it would find the run not yet 'approved', log a warning and
+    return, leaving the report stuck with nothing to retry it.
+    """
+    run = _approved_run(installation, suite)
+    with (
+        patch("audit.tasks.send_approved_report.delay") as delay,
+        django_capture_on_commit_callbacks(execute=True),
+    ):
+        run.enqueue_send()
+        delay.assert_not_called()
+    delay.assert_called_once_with(run.pk)
+
+
+@pytest.mark.django_db
 def test_send_approved_report_sends_marks_sent_and_cleans_up(installation, suite):
     run = _approved_run(installation, suite)
     with (
