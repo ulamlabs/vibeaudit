@@ -12,7 +12,13 @@ from django.urls import reverse
 from django.utils import timezone
 
 from audit.admin import AuditJobAdmin, AuditRunAdmin
-from audit.models import SEND_STRANDED_SECONDS, AuditAgent, AuditJob, AuditRun, AuditSuite
+from audit.models import (
+    SEND_STRANDED_SECONDS,
+    AuditAgent,
+    AuditJob,
+    AuditRun,
+    AuditSuite,
+)
 from github_app.models import Installation
 
 # AuditRunAdmin.Media references a real static asset (audit/md_preview.css).
@@ -258,9 +264,7 @@ def test_ready_job_awaiting_approval_does_not_need_attention(installation, suite
 
 
 @pytest.mark.django_db
-def test_has_reset_stranded_send_permission_false_until_stranded(
-    installation, suite
-):
+def test_has_reset_stranded_send_permission_false_until_stranded(installation, suite):
     admin_obj = AuditRunAdmin(AuditRun, site)
     run = _run(installation, suite, AuditRun.ReportState.SENDING)
     run.sending_since = timezone.now()
@@ -389,9 +393,7 @@ def test_needs_attention_agrees_between_annotated_and_plain_instance(
     )
     AuditJob.objects.filter(pk=job.pk).update(state=state)
     if with_outstanding_run:
-        AuditRun.objects.create(
-            job=job, suite=suite, status=AuditRun.Status.PENDING
-        )
+        AuditRun.objects.create(job=job, suite=suite, status=AuditRun.Status.PENDING)
 
     admin_obj = AuditJobAdmin(AuditJob, site)
 

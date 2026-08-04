@@ -7,7 +7,13 @@ from django.utils import timezone
 
 from audit.admin import AuditRunForm
 from audit.ai.suites import suite_to_agent_definitions
-from audit.models import SEND_STRANDED_SECONDS, AuditAgent, AuditJob, AuditRun, AuditSuite
+from audit.models import (
+    SEND_STRANDED_SECONDS,
+    AuditAgent,
+    AuditJob,
+    AuditRun,
+    AuditSuite,
+)
 from github_app.models import Installation
 
 
@@ -502,9 +508,7 @@ def test_sending_report_counts_as_outstanding(installation, default_suite):
     run = AuditRun.objects.create(
         job=job, suite=default_suite, status=AuditRun.Status.COMPLETED
     )
-    AuditRun.objects.filter(pk=run.pk).update(
-        report_state=AuditRun.ReportState.SENDING
-    )
+    AuditRun.objects.filter(pk=run.pk).update(report_state=AuditRun.ReportState.SENDING)
     assert job.has_outstanding_runs is True
 
 

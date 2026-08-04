@@ -125,7 +125,9 @@ def test_job_cloning_shows_only_mark_failed(admin_client_logged_in, installation
 
 
 @pytest.mark.django_db
-def test_job_closed_shows_none_of_the_four_actions(admin_client_logged_in, installation):
+def test_job_closed_shows_none_of_the_four_actions(
+    admin_client_logged_in, installation
+):
     job = _job(installation, AuditJob.State.CLOSED)
     html = _job_change_html(admin_client_logged_in, job)
     assert "/approve/" not in html
@@ -177,7 +179,9 @@ def test_run_sent_shows_none_of_the_four_report_buttons(
 
 
 @pytest.mark.django_db
-def test_run_sending_fresh_hides_reset_send(admin_client_logged_in, installation, suite):
+def test_run_sending_fresh_hides_reset_send(
+    admin_client_logged_in, installation, suite
+):
     run = _run(installation, suite, AuditRun.ReportState.SENDING)
     run.sending_since = timezone.now()
     run.save(update_fields=["sending_since"])
@@ -187,7 +191,9 @@ def test_run_sending_fresh_hides_reset_send(admin_client_logged_in, installation
 
 
 @pytest.mark.django_db
-def test_run_sending_stale_shows_reset_send(admin_client_logged_in, installation, suite):
+def test_run_sending_stale_shows_reset_send(
+    admin_client_logged_in, installation, suite
+):
     run = _run(installation, suite, AuditRun.ReportState.SENDING)
     run.sending_since = timezone.now() - timedelta(hours=2)
     run.save(update_fields=["sending_since"])

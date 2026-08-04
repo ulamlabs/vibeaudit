@@ -12,7 +12,13 @@ from audit.email import (
     send_report_email,
     send_run_failure_notification,
 )
-from audit.models import SEND_STRANDED_SECONDS, AuditAgent, AuditJob, AuditRun, AuditSuite
+from audit.models import (
+    SEND_STRANDED_SECONDS,
+    AuditAgent,
+    AuditJob,
+    AuditRun,
+    AuditSuite,
+)
 from audit.tasks import send_approved_report
 from github_app.models import Installation
 
@@ -225,9 +231,7 @@ def test_send_approved_report_skips_runs_not_approved(installation, suite):
 
 
 @pytest.mark.django_db
-def test_send_approved_report_skips_a_run_already_claimed_sending(
-    installation, suite
-):
+def test_send_approved_report_skips_a_run_already_claimed_sending(installation, suite):
     """Simulates the second of two racing workers: the first already claimed
     the run (approved -> sending), so this call must not send a second time."""
     run = _approved_run(installation, suite)
@@ -268,9 +272,7 @@ def test_send_approved_report_closes_the_job(installation, suite):
 
 
 @pytest.mark.django_db
-def test_send_approved_report_keeps_job_open_while_another_awaits(
-    installation, suite
-):
+def test_send_approved_report_keeps_job_open_while_another_awaits(installation, suite):
     run = _approved_run(installation, suite)
     other = AuditRun.objects.create(
         job=run.job, suite=suite, status=AuditRun.Status.COMPLETED

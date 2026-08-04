@@ -259,9 +259,7 @@ class AuditRunAdmin(ModelAdmin):
 
     def _run_field(self, object_id, field):
         return (
-            AuditRun.objects.filter(pk=object_id)
-            .values_list(field, flat=True)
-            .first()
+            AuditRun.objects.filter(pk=object_id).values_list(field, flat=True).first()
         )
 
     def _awaits_decision(self, object_id) -> bool:
@@ -445,9 +443,15 @@ class AuditJobAdmin(ModelAdmin):
         # Annotate once instead of one EXISTS query per row: needs_attention
         # otherwise runs obj.has_outstanding_runs per changelist row, and the
         # `or` only short-circuits for overdue jobs, so nearly every row pays it.
-        return super().get_queryset(request).annotate(
-            _has_outstanding=Exists(
-                AuditRun.objects.filter(AuditJob.outstanding_runs_q(), job=OuterRef("pk"))
+        return (
+            super()
+            .get_queryset(request)
+            .annotate(
+                _has_outstanding=Exists(
+                    AuditRun.objects.filter(
+                        AuditJob.outstanding_runs_q(), job=OuterRef("pk")
+                    )
+                )
             )
         )
 

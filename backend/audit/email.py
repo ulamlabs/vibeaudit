@@ -115,9 +115,9 @@ def send_report_approval_notification(run) -> None:
                 "site_url": settings.SITE_URL,
             }
         )
-        html_body = Template(
-            _load_email_template("report_approval_email.html")
-        ).render(ctx)
+        html_body = Template(_load_email_template("report_approval_email.html")).render(
+            ctx
+        )
         plain_body = (
             f"The audit report for {run.job.repo_full_name} (run #{run.pk}) is "
             "complete and awaiting approval before it is sent to the submitter."

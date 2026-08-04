@@ -1,5 +1,5 @@
 import shutil
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from django.conf import settings
@@ -506,7 +506,7 @@ class AuditRun(models.Model):
             self.report_state == AuditRun.ReportState.AWAITING_APPROVAL
             and new_state == AuditRun.ReportState.APPROVED
         )
-        update_fields = {"report_state": new_state}
+        update_fields: dict[str, str | datetime | None] = {"report_state": new_state}
         if not is_failed_send_rollback:
             update_fields["sending_since"] = None
         if is_fresh_approval:
