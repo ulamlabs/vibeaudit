@@ -21,11 +21,11 @@ def get_llm(model_name: str, cost_callback=None):
     if provider == "anthropic":
         from langchain_anthropic import ChatAnthropic
 
-        kwargs = dict(
-            model=model_name,
-            api_key=settings.AI_ANTHROPIC_API_KEY,
-            rate_limiter=_rate_limiter(),
-        )
+        kwargs = {
+            "model": model_name,
+            "api_key": settings.AI_ANTHROPIC_API_KEY,
+            "rate_limiter": _rate_limiter(),
+        }
         max_tokens = settings.AI_MAX_TOKENS
         if max_tokens:
             kwargs["max_tokens"] = max_tokens

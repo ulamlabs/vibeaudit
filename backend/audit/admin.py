@@ -1,7 +1,7 @@
-from django import forms
 from celery import current_app
-from django.contrib import admin, messages
+from django import forms
 from django.conf import settings as django_settings
+from django.contrib import admin, messages
 from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group, User
@@ -189,7 +189,7 @@ class AuditRunAdmin(ModelAdmin):
         run = AuditRun.objects.get(pk=object_id)
         try:
             pdf_bytes = render_pdf(run)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — surface any render failure in the admin
             self.message_user(request, f"PDF generation failed: {exc}", messages.ERROR)
             return redirect(reverse("admin:audit_auditrun_change", args=[object_id]))
         response = HttpResponse(pdf_bytes, content_type="application/pdf")

@@ -16,7 +16,7 @@ def allow_anon(settings):
 
 def _state_from_redirect(location: str) -> str:
     # location: https://github.com/apps/<slug>/installations/new?state=<state>
-    from urllib.parse import urlsplit, parse_qs
+    from urllib.parse import parse_qs, urlsplit
 
     return parse_qs(urlsplit(location).query)["state"][0]
 

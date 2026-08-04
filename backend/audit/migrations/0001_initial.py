@@ -3,7 +3,6 @@
 import django.db.models.deletion
 from django.db import migrations, models
 
-
 _DEFAULT_AGENT = {
     "agent_id": "project_overview",
     "name": "Project Overview",

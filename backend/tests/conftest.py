@@ -4,9 +4,9 @@ import os
 # assertions are deterministic. Must be set before litellm is first imported.
 os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "true")
 
-from unittest.mock import patch  # noqa: E402
+from unittest.mock import patch
 
-import pytest  # noqa: E402
+import pytest
 
 
 @pytest.fixture(autouse=True)

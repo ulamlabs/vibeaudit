@@ -1,9 +1,7 @@
-from bs4 import BeautifulSoup
-from slugify import slugify
-
 import nh3
+from bs4 import BeautifulSoup
 from markdown_it import MarkdownIt
-
+from slugify import slugify
 
 _md = MarkdownIt("commonmark").enable("table")
 

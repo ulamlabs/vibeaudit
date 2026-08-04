@@ -102,7 +102,7 @@ class InstallationAdmin(ModelAdmin):
                     "Installation no longer exists on GitHub. Marked as remote-deleted.",
                     messages.WARNING,
                 )
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — surface any GitHub failure in the admin
                 self.message_user(
                     request, f"Could not verify with GitHub: {e}", messages.ERROR
                 )

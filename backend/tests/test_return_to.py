@@ -1,8 +1,8 @@
 from github_app.return_to import (
     build_state,
-    parse_state,
-    origin_of,
     is_allowed_return_to,
+    origin_of,
+    parse_state,
 )
 
 
@@ -24,7 +24,7 @@ def test_build_and_parse_without_return_to():
 
 def test_parse_state_tolerates_garbage_input():
     # Not valid base64-JSON — should fall back to (raw_input, None) without raising.
-    nonce, return_to = parse_state("@@@not-base64@@@")
+    _nonce, return_to = parse_state("@@@not-base64@@@")
     assert return_to is None
 
 

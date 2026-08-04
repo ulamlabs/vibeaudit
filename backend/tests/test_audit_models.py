@@ -483,10 +483,12 @@ def test_delete_clone_runs_on_a_worker(
     """The web pod has no repos volume, so the rmtree must be dispatched."""
     settings.REPOS_DIR = "/repos"
     job = _job(installation, AuditJob.State.READY)
-    with patch("audit.tasks.delete_job_dir.delay") as delay:
-        with patch("shutil.rmtree") as rmtree:
-            with django_capture_on_commit_callbacks(execute=True):
-                job.cleanup()
+    with (
+        patch("audit.tasks.delete_job_dir.delay") as delay,
+        patch("shutil.rmtree") as rmtree,
+        django_capture_on_commit_callbacks(execute=True),
+    ):
+        job.cleanup()
     rmtree.assert_not_called()
     delay.assert_called_once_with(job.pk)
 
