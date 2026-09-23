@@ -56,7 +56,7 @@ class CostBudgetCallback(BaseCallbackHandler):
         try:
             info = litellm.get_model_info(self.model_name)
             return info.get("max_output_tokens") or _FALLBACK_MAX_OUTPUT_TOKENS
-        except Exception:
+        except Exception:  # noqa: BLE001 — unknown model / litellm error falls back
             return _FALLBACK_MAX_OUTPUT_TOKENS
 
     def on_chat_model_start(self, serialized, messages, **kwargs) -> None:

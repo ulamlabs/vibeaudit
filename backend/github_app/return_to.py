@@ -2,7 +2,7 @@ import base64
 from typing import TypeGuard
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, field_validator, ValidationError
+from pydantic import BaseModel, ValidationError, field_validator
 
 
 class _StatePayload(BaseModel):

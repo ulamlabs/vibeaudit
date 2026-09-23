@@ -2,19 +2,18 @@
 GitHub App OAuth views.
 """
 
+import logging
 import secrets
 from urllib.parse import quote
 
 from django.conf import settings
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import redirect
-from rest_framework.decorators import api_view
-from rest_framework.decorators import authentication_classes
+from rest_framework.decorators import api_view, authentication_classes
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from audit.authentication import AuditAuthentication
-
 from github_app.github import (
     InstallationNotFoundError,
     check_installation_active,
@@ -26,8 +25,10 @@ from github_app.permissions import (
     ActiveInstallationPermission,
     mark_installation_gone,
 )
-from github_app.return_to import build_state, parse_state, is_allowed_return_to
+from github_app.return_to import build_state, is_allowed_return_to, parse_state
 from github_app.serializers import InstallationSerializer, RepoSerializer
+
+logger = logging.getLogger(__name__)
 
 
 @api_view(["GET"])
@@ -140,8 +141,8 @@ class InstallationsView(APIView):
         except InstallationNotFoundError:
             mark_installation_gone(installation)
         except Exception:
-            # Network errors etc. — don't penalise the user; treat as still active.
-            pass
+            # Don't penalise the user; treat as still active.
+            logger.warning("Installation check failed; assuming active", exc_info=True)
 
         has_active_jobs = installation.has_active_audit_jobs()
 
@@ -202,6 +203,7 @@ class ReposView(APIView):
         except InstallationNotFoundError:
             mark_installation_gone(installation)
         except Exception:
+            logger.warning("Listing repos failed", exc_info=True)
             return Response(
                 {"error": "Failed to load repositories. Please try again."}, status=503
             )

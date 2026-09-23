@@ -24,7 +24,7 @@ def test_empty_input_returns_empty_string() -> None:
 
 
 def test_render_markdown_to_html_adds_heading_ids() -> None:
-    html, items = render_markdown_to_html(
+    html, _items = render_markdown_to_html(
         "## Hello World\n\ntext\n\n### A Finding\n\nmore"
     )
     assert 'id="hello-world"' in html
@@ -32,7 +32,7 @@ def test_render_markdown_to_html_adds_heading_ids() -> None:
 
 
 def test_render_markdown_to_html_returns_toc_items() -> None:
-    html, items = render_markdown_to_html("## Hello World\n\n### A Finding\n\ntext")
+    _html, items = render_markdown_to_html("## Hello World\n\n### A Finding\n\ntext")
     assert items == [(2, "Hello World", "hello-world"), (3, "A Finding", "a-finding")]
 
 
@@ -43,6 +43,6 @@ def test_render_markdown_to_html_empty_returns_empty() -> None:
 
 
 def test_render_markdown_to_html_still_strips_scripts() -> None:
-    html, items = render_markdown_to_html("## Hi\n\n<script>alert(1)</script>")
+    html, _items = render_markdown_to_html("## Hi\n\n<script>alert(1)</script>")
     assert "<script>" not in html
     assert "alert(1)" not in html

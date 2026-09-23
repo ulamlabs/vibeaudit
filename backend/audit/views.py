@@ -10,7 +10,6 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from audit.authentication import AuditAuthentication
-
 from audit.models import AuditJob
 from audit.serializers import AuditJobSerializer, StartAuditSerializer
 from audit.tasks import clone_repo
@@ -19,7 +18,6 @@ from github_app.permissions import (
     ActiveInstallationPermission,
     mark_installation_gone,
 )
-
 
 logger = logging.getLogger(__name__)
 

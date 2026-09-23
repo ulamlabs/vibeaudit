@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from deepagents import (
@@ -10,7 +10,6 @@ from deepagents import (
     register_harness_profile,
 )
 from deepagents.backends import CompositeBackend, FilesystemBackend, StateBackend
-
 from langchain.agents.structured_output import ToolStrategy
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 
@@ -192,7 +191,7 @@ def run_pipeline(
     )
     report = PipelineReport(
         job_id=str(job.pk),
-        completed_at=datetime.now(tz=timezone.utc).isoformat(),
+        completed_at=datetime.now(tz=UTC).isoformat(),
         repo_name=repo_name,
         summary=submitted.summary,
         markdown=submitted.markdown,

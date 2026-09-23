@@ -280,7 +280,7 @@ class AuditSuite(models.Model):
         ),
     )
     created_at = models.DateTimeField(auto_now_add=True)
-    agents: models.ManyToManyField["AuditAgent", "AuditAgent"] = models.ManyToManyField(
+    agents: models.ManyToManyField[AuditAgent, AuditAgent] = models.ManyToManyField(
         "AuditAgent",
         blank=True,
         related_name="suites",
