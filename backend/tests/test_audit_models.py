@@ -465,14 +465,30 @@ def test_maybe_cleanup_is_idempotent_on_a_closed_job(installation):
 
 @pytest.mark.django_db
 def test_maybe_cleanup_deletes_the_clone_directory(
-    installation, default_suite, tmp_path, settings
+    installation, default_suite, tmp_path, settings, django_capture_on_commit_callbacks
 ):
     settings.REPOS_DIR = str(tmp_path)
     job = _ready_job_with_clone(installation)
     job.clone_path.mkdir(parents=True, exist_ok=True)
     assert job.job_dir.exists()
-    assert AuditJob.maybe_cleanup_sources(job.pk) is True
+    with django_capture_on_commit_callbacks(execute=True):
+        assert AuditJob.maybe_cleanup_sources(job.pk) is True
     assert not job.job_dir.exists()
+
+
+@pytest.mark.django_db
+def test_delete_clone_runs_on_a_worker(
+    installation, settings, django_capture_on_commit_callbacks
+):
+    """The web pod has no repos volume, so the rmtree must be dispatched."""
+    settings.REPOS_DIR = "/repos"
+    job = _job(installation, AuditJob.State.READY)
+    with patch("audit.tasks.delete_job_dir.delay") as delay:
+        with patch("shutil.rmtree") as rmtree:
+            with django_capture_on_commit_callbacks(execute=True):
+                job.cleanup()
+    rmtree.assert_not_called()
+    delay.assert_called_once_with(job.pk)
 
 
 @pytest.mark.django_db

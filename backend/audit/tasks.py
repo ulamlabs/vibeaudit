@@ -85,12 +85,20 @@ def clone_repo(job_id: int) -> None:
 
 
 @shared_task
-def cleanup_job_dir(job_id: int) -> None:
+def delete_job_dir(job_id: int) -> None:
+    """Remove a job's clone from the repos volume.
+
+    Takes the id, not the path: the caller is the web pod, which cannot see the
+    repos volume, and job_dir_for derives the location without the row — which
+    the post_delete caller has already lost. Errors are not swallowed: a clone
+    left on disk while the job reads "closed" is exactly the failure this task
+    exists to make visible.
+    """
+    job_dir = AuditJob.job_dir_for(job_id)
     try:
-        job = AuditJob.objects.get(pk=job_id)
-    except AuditJob.DoesNotExist:
-        return
-    job.delete_clone()
+        shutil.rmtree(job_dir)
+    except FileNotFoundError:
+        logger.info("No clone on disk for job %s (%s)", job_id, job_dir)
 
 
 @shared_task(bind=True)
