@@ -1,4 +1,3 @@
-import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -87,16 +86,30 @@ class AuditJob(models.Model):
             )
         self.state = new_state
 
+    @staticmethod
+    def job_dir_for(job_id: int) -> Path:
+        """Where a job's clone lives, by id — usable once the row is gone."""
+        return Path(settings.REPOS_DIR) / str(job_id)
+
     @property
     def job_dir(self) -> Path:
-        return Path(settings.REPOS_DIR) / str(self.pk)
+        return self.job_dir_for(self.pk)
 
     @property
     def clone_path(self) -> Path:
         return self.job_dir / self.repo_full_name
 
     def delete_clone(self) -> None:
-        shutil.rmtree(self.job_dir, ignore_errors=True)
+        """Hand the rmtree to a worker instead of running it here.
+
+        Only the worker pod mounts the repos volume (it is ReadWriteOnce, so the
+        web pod cannot mount it too). An rmtree issued from the admin therefore
+        deleted nothing while every caller here reported success.
+        """
+        from audit.tasks import delete_job_dir
+
+        job_id = self.pk
+        transaction.on_commit(lambda: delete_job_dir.delay(job_id))
 
     def default_suite(self):
         suite = AuditSuite.objects.filter(is_default=True).first()
