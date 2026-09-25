@@ -89,7 +89,7 @@ Commit all changes on the branch: write the message to a file with the Write too
 - deepagents internals notes from step 3
 - **Action required** and **Needs human**, if any
 
-If the upgrade changed nothing, skip the commit and write a one-paragraph body saying the stack is current and why.
+If the upgrade changed nothing, there is no PR: skip the commit, and in CI write a one-line note to `$PR_BODY_FILE` saying the stack is current (CI shows it in the run summary; it tells "nothing to do" apart from a stuck run). Locally, just report it and stop.
 
 The PR is a **draft** whenever **Action required** or **Needs human** has content. Then take one branch:
 
