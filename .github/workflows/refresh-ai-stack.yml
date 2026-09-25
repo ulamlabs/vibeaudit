@@ -30,14 +30,14 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
 
       # uv provisions the Python that pyproject's requires-python asks for.
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
 
       - name: Create branch
         id: branch
@@ -79,7 +79,7 @@ jobs:
 
       - name: Upload result
         if: steps.bundle.outputs.changed == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: refresh
           path: |
@@ -107,12 +107,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Download result
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: refresh
           path: ${{ runner.temp }}/refresh
