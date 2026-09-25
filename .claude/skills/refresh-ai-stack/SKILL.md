@@ -82,16 +82,16 @@ Done when all four commands are green, or every red one is written up under **Ne
 
 ## 6. Hand off
 
-Commit all changes on the branch. Write the PR body holding:
+Commit all changes on the branch: write the message to a file with the Write tool and run `git commit -F <file>`. Write the PR body holding:
 
 - version table (before → after) for the AI packages
 - model list diff, with the reason for each add/drop
 - deepagents internals notes from step 3
 - **Action required** and **Needs human**, if any
 
-Then take one branch:
+If the upgrade changed nothing, there is no PR: skip the commit, and in CI write a one-line note to `$PR_BODY_FILE` saying the stack is current (CI shows it in the run summary; it tells "nothing to do" apart from a stuck run). Locally, just report it and stop.
 
-The PR is a **draft** whenever **Action required** or **Needs human** has content.
+The PR is a **draft** whenever **Action required** or **Needs human** has content. Then take one branch:
 
 - **`$PR_BODY_FILE` is set** (CI): write the body to that path; if the PR is a draft, also create `$PR_DRAFT_FILE`. Then stop. CI pushes and opens the PR; you have no push access.
 - **Otherwise** (local): push, and `gh pr create` with the body, adding `--draft` if the PR is a draft.

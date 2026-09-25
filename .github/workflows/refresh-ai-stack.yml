@@ -60,13 +60,15 @@ jobs:
             You are on branch ${{ steps.branch.outputs.name }}; PR_BODY_FILE is ${{ env.PR_BODY_FILE }}; PR_DRAFT_FILE is ${{ env.PR_DRAFT_FILE }}.
           claude_args: >-
             --max-turns 150
-            --allowedTools "Read,Edit,Write,Glob,Grep,WebFetch,Bash(uv:*),Bash(uvx:*),Bash(grep:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git add:*),Bash(git commit:*)"
+            --allowedTools "Read,Edit,Write,Glob,Grep,WebFetch,Bash(cd:*),Bash(ls:*),Bash(cat:*),Bash(head:*),Bash(tail:*),Bash(find:*),Bash(wc:*),Bash(uv:*),Bash(uvx:*),Bash(grep:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git add:*),Bash(git commit:*)"
 
       - name: Bundle result
         id: bundle
         run: |
           if [ "$(git rev-list --count master..HEAD)" = 0 ]; then
-            echo "No commits; nothing to publish."
+            # The skill always writes a body; without one Claude didn't finish.
+            test -s "$PR_BODY_FILE" || { echo "::error::Claude produced no commit and no PR body."; exit 1; }
+            { echo "### No changes"; cat "$PR_BODY_FILE"; } >> "$GITHUB_STEP_SUMMARY"
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
