@@ -1,3 +1,0 @@
-# CI workflows and agent instructions run with repo secrets; changes need an owner's review.
-/.github/ @zdzislaw-ulam @novirael
-/.claude/ @zdzislaw-ulam @novirael
