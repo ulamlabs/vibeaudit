@@ -71,7 +71,7 @@ def test_run_pipeline_returns_result_with_report_and_outputs() -> None:
     submitted = SubmittedReport(summary="Some risk.", markdown="## Findings\nstuff")
     captures = [AgentOutputCapture(agent_id="project_overview", output="## Repo\ns")]
     with patch("audit.ai.runner._run_orchestrator", return_value=(submitted, captures)):
-        result = run_pipeline(_FakeJob(), agents=[], model_name="claude-sonnet-4-6")
+        result = run_pipeline(_FakeJob(), agents=[], model_name="claude-sonnet-5")
     assert isinstance(result, PipelineResult)
     assert result.report.job_id == "job-xyz"
     assert result.report.repo_name == "acme/widgets"

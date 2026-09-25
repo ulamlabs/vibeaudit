@@ -41,7 +41,7 @@ def installation():
 
 @pytest.fixture
 def suite():
-    s = AuditSuite.objects.create(name="S", is_default=True, model="claude-sonnet-4-6")
+    s = AuditSuite.objects.create(name="S", is_default=True, model="claude-sonnet-5")
     agent, _ = AuditAgent.objects.get_or_create(
         agent_id="project_overview",
         defaults={"name": "PO", "description": "d", "prompt": "p"},
