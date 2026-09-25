@@ -51,7 +51,6 @@ jobs:
           echo "name=$name" >> "$GITHUB_OUTPUT"
 
       - name: Run Claude
-        id: claude
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -62,15 +61,6 @@ jobs:
           claude_args: >-
             --max-turns 150
             --allowedTools "Read,Edit,Write,Glob,Grep,WebFetch,Bash(cd:*),Bash(ls:*),Bash(cat:*),Bash(head:*),Bash(tail:*),Bash(find:*),Bash(wc:*),Bash(uv:*),Bash(uvx:*),Bash(grep:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git add:*),Bash(git commit:*)"
-
-      - name: Report denied tool calls
-        if: always() && steps.claude.outputs.execution_file != ''
-        run: |
-          denials=$(jq -r '[.[] | select(.type == "result")][-1].permission_denials // [] | .[] | "- `\(.tool_name)`: `\(.tool_input | tostring | .[0:200])`"' "${{ steps.claude.outputs.execution_file }}")
-          if [ -n "$denials" ]; then
-            { echo "### Denied tool calls"; echo "$denials"; } >> "$GITHUB_STEP_SUMMARY"
-            echo "::warning::Claude had tool calls denied; see the run summary."
-          fi
 
       - name: Bundle result
         id: bundle
