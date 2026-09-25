@@ -7,7 +7,7 @@ from litellm import cost_per_token
 
 from audit.ai.budget import CostBudgetCallback, CostBudgetExceeded
 
-MODEL = "claude-sonnet-4-6"
+MODEL = "claude-sonnet-5"
 
 
 def _llm_result(input_tokens, output_tokens, cache_read=0, cache_creation=0):

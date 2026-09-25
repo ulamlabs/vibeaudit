@@ -33,7 +33,7 @@ def installation():
 
 @pytest.fixture
 def suite():
-    s = AuditSuite.objects.create(name="S", is_default=True, model="claude-sonnet-4-6")
+    s = AuditSuite.objects.create(name="S", is_default=True, model="claude-sonnet-5")
     agent, _ = AuditAgent.objects.get_or_create(
         agent_id="project_overview",
         defaults={"name": "PO", "description": "d", "prompt": "p"},
@@ -232,7 +232,7 @@ def test_execute_audit_run_fails_when_model_not_in_whitelist(installation):
     run = AuditRun.objects.create(job=job, suite=suite)
     with (
         patch("audit.ai.runner.run_pipeline") as mock_pipeline,
-        override_settings(AVAILABLE_AI_MODELS=["claude-sonnet-4-6"]),
+        override_settings(AVAILABLE_AI_MODELS=["claude-sonnet-5"]),
     ):
         execute_audit_run(run.pk)
     mock_pipeline.assert_not_called()
