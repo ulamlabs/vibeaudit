@@ -75,8 +75,13 @@ class AuditSuiteAdminForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        available = django_settings.AVAILABLE_AI_MODELS
+        available = list(django_settings.AVAILABLE_AI_MODELS)
         if available:
+            # Keep an unlisted current model selectable so saving the suite for an
+            # unrelated edit doesn't silently switch it to the first option.
+            current = self.instance.model
+            if current and current not in available:
+                available.insert(0, current)
             self.fields["model"].widget = forms.Select(
                 choices=[(m, m) for m in available]
             )
