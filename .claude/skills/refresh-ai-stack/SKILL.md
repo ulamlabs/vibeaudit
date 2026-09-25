@@ -11,7 +11,7 @@ The supported models (`AVAILABLE_AI_MODELS` default in `backend/vibeaudit/settin
 - **deepagents harness profiles**: per-model prompt/tool tuning keyed `provider:model`. A model without a profile still runs, but untuned.
 - **litellm `model_cost`**: `audit/ai/budget.py` prices every call through it. A model missing here breaks the cost budget.
 
-The **invariant**: every default model has an `anthropic:<model>` harness profile AND a `litellm.model_cost` entry. The whole refresh exists to restore it after upgrading.
+The **invariant**: every default model has a `litellm.model_cost` entry. A harness profile is a bonus, not a gate: deepagents lags new Claude releases, and our provider-wide `anthropic` profile applies either way.
 
 Work from `backend/`, on a branch `chore/refresh-ai-stack-<YYYY-MM>`.
 
@@ -55,13 +55,11 @@ Done when each symbol above is marked unchanged or changed-with-note.
 
 ## 4. Re-sync the model list
 
-Re-run the snapshot command from step 1. Then for each `anthropic:*` profile, and each current default, check `m in litellm.model_cost`.
+Re-run the snapshot command from step 1. List the `claude-*` models in `litellm.model_cost` (bare aliases, not dated or provider-suffixed IDs), and check each current default is still there.
 
-- **Add** a model that newly has a profile and a price.
-- **Drop** a model whose profile vanished, or that Anthropic has retired.
-- Keep the list to one current model per tier (haiku / sonnet / opus). A newer model in a tier replaces the older one.
+The default holds exactly the newest priced model in each tier (haiku / sonnet / opus), in that order. A newer model replaces the older one in its tier. In the PR body, mark each default with whether it has an `anthropic:<model>` harness profile.
 
-Update the `AVAILABLE_AI_MODELS` default; it is the only place model names live in app code. Existing `AuditSuite` rows point at model names; a dropped model breaks those suites at run time (`audit/tasks.py` rejects it), so name every dropped model in the PR body under **Action required**, telling deployers to switch those suites in the admin or keep the model via the `AVAILABLE_AI_MODELS` env var. Suites are deployment data: the fix belongs to each deployer, so the refresh ships with no migrations (`uv run python manage.py makemigrations --check` stays clean).
+Update the `AVAILABLE_AI_MODELS` default; it is the only place model names live in app code. It is a default, not a rollout: deployments that set the `AVAILABLE_AI_MODELS` env var keep their own list. Existing `AuditSuite` rows point at model names, and a replaced model fails those suites' runs (`audit/tasks.py`) on deployments that use the default. Name every replaced model in the PR body under **Replaced models**, telling self-hosters to switch those suites in the admin or keep the model via the `AVAILABLE_AI_MODELS` env var. This alone doesn't make the PR a draft. Suites are deployment data, so the refresh ships with no migrations (`uv run python manage.py makemigrations --check` stays clean).
 
 Done when the invariant holds for every model in the new default.
 
@@ -85,7 +83,8 @@ Done when all four commands are green, or every red one is written up under **Ne
 Commit all changes on the branch: write the message to a file with the Write tool and run `git commit -F <file>`. Write the PR body holding:
 
 - version table (before → after) for the AI packages
-- model list diff, with the reason for each add/drop
+- model list diff, with the reason for each change and each model's harness-profile status
+- **Replaced models**, if any
 - deepagents internals notes from step 3
 - **Action required** and **Needs human**, if any
 
