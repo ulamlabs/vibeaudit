@@ -1,0 +1,35 @@
+version: 2
+
+updates:
+  - package-ecosystem: "uv"
+    directory: "/backend"
+    schedule:
+      interval: "monthly"
+    # The AI stack is owned by the refresh-ai-stack workflow, which also re-syncs
+    # the supported model list. Keep in sync with step 2 of its skill.
+    ignore:
+      - dependency-name: "anthropic"
+      - dependency-name: "deepagents"
+      - dependency-name: "langchain*"
+      - dependency-name: "langgraph*"
+      - dependency-name: "langsmith"
+      - dependency-name: "litellm"
+    groups:
+      backend:
+        patterns: ["*"]
+
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "monthly"
+    groups:
+      frontend:
+        patterns: ["*"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    groups:
+      actions:
+        patterns: ["*"]

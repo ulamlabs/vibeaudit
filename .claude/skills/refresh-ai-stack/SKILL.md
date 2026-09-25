@@ -30,7 +30,20 @@ Done when both outputs are saved.
 
 ## 2. Upgrade
 
-`uv lock --upgrade && uv sync --group dev`. Upgrade everything, not just the AI packages: one monthly PR beats scattered bumps. If `deepagents` crosses a minor version (0.x → 0.y), raise the floor in `pyproject.toml` to the new version.
+Upgrade only the AI stack; Dependabot owns every other dependency and ignores these (`.github/dependabot.yml`):
+
+```sh
+uv lock \
+  --upgrade-package anthropic --upgrade-package deepagents --upgrade-package litellm \
+  --upgrade-package langsmith --upgrade-package langchain --upgrade-package langchain-core \
+  --upgrade-package langchain-anthropic --upgrade-package langchain-google-genai \
+  --upgrade-package langchain-protocol --upgrade-package langgraph \
+  --upgrade-package langgraph-checkpoint --upgrade-package langgraph-prebuilt \
+  --upgrade-package langgraph-sdk
+uv sync --group dev
+```
+
+The AI stack is `anthropic`, `deepagents`, `litellm`, `langsmith`, and every `langchain*` / `langgraph*` package. `uv lock` takes names, not globs, so first check `uv.lock` for `langchain*` / `langgraph*` packages missing above, and add them to the command and to this list. If `deepagents` crosses a minor version (0.x → 0.y), raise the floor in `pyproject.toml` to the new version. If a non-AI package must move for the AI stack to resolve, let it, and name it in the PR body.
 
 Done when `uv.lock` is updated and sync succeeds.
 
