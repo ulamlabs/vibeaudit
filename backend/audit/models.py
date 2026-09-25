@@ -248,7 +248,7 @@ class AuditSuite(models.Model):
     )
     model = models.CharField(
         max_length=100,
-        help_text="Model name (e.g. 'claude-opus-4-7'). Combined with AI_MODEL_PROVIDER at run time.",
+        help_text="Model name from AVAILABLE_AI_MODELS. Combined with AI_MODEL_PROVIDER at run time.",
     )
     email_html_body = models.TextField(
         blank=True,

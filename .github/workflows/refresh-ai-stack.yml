@@ -1,0 +1,138 @@
+name: Refresh AI stack
+
+# Only schedule and manual dispatch: neither can be fired by a fork or an outside
+# contributor, and both always run the workflow file from the default branch.
+on:
+  schedule:
+    - cron: "17 6 1 * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: refresh-ai-stack
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: Refresh (Claude)
+    if: github.repository == 'ulamlabs/vibeaudit' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # ANTHROPIC_API_KEY lives only in this environment, restricted to master, so a
+    # workflow edited on any other branch cannot read it.
+    environment: ai-maintenance
+    # Claude gets a read-only token: it commits locally, the publish job pushes.
+    permissions:
+      contents: read
+    env:
+      SECRET_KEY: ci-secret-key
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # uv provisions the Python that pyproject's requires-python asks for.
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Create branch
+        id: branch
+        run: |
+          name="chore/refresh-ai-stack-$(date -u +%Y-%m)"
+          git switch -c "$name"
+          echo "PR_BODY_FILE=$RUNNER_TEMP/pr-body.md" >> "$GITHUB_ENV"
+          echo "PR_DRAFT_FILE=$RUNNER_TEMP/pr-draft" >> "$GITHUB_ENV"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - name: Run Claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: |
+            Follow .claude/skills/refresh-ai-stack/SKILL.md end to end.
+            You are on branch ${{ steps.branch.outputs.name }}; PR_BODY_FILE is ${{ env.PR_BODY_FILE }}; PR_DRAFT_FILE is ${{ env.PR_DRAFT_FILE }}.
+          claude_args: >-
+            --max-turns 150
+            --allowedTools "Read,Edit,Write,Glob,Grep,WebFetch,Bash(uv:*),Bash(uvx:*),Bash(grep:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git add:*),Bash(git commit:*)"
+
+      - name: Bundle result
+        id: bundle
+        run: |
+          if [ "$(git rev-list --count master..HEAD)" = 0 ]; then
+            echo "No commits; nothing to publish."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          test -s "$PR_BODY_FILE"
+          git bundle create "$RUNNER_TEMP/refresh.bundle" master..HEAD
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Upload result
+        if: steps.bundle.outputs.changed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: refresh
+          path: |
+            ${{ runner.temp }}/refresh.bundle
+            ${{ runner.temp }}/pr-body.md
+            ${{ runner.temp }}/pr-draft
+          retention-days: 7
+
+    outputs:
+      branch: ${{ steps.branch.outputs.name }}
+      changed: ${{ steps.bundle.outputs.changed }}
+
+  publish:
+    name: Open PR
+    needs: refresh
+    if: needs.refresh.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      BRANCH: ${{ needs.refresh.outputs.branch }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download result
+        uses: actions/download-artifact@v4
+        with:
+          name: refresh
+          path: ${{ runner.temp }}/refresh
+
+      - name: Fetch bundle
+        run: git fetch "$RUNNER_TEMP/refresh/refresh.bundle" "HEAD:$BRANCH"
+
+      - name: Allow only expected paths
+        run: >-
+          git diff --stat --exit-code "master...$BRANCH" --
+          ':!backend' ':!.claude/skills/refresh-ai-stack'
+
+      - name: Push and open PR
+        run: |
+          git push --force origin "$BRANCH"
+          draft=""
+          [ -f "$RUNNER_TEMP/refresh/pr-draft" ] && draft="--draft"
+          gh pr create --base master --head "$BRANCH" $draft \
+            --title "Refresh AI stack ($(date -u +%Y-%m))" \
+            --body-file "$RUNNER_TEMP/refresh/pr-body.md" \
+            || gh pr edit "$BRANCH" --body-file "$RUNNER_TEMP/refresh/pr-body.md"
+
+      # Pushes made with GITHUB_TOKEN don't trigger other workflows; dispatch CI so
+      # its checks land on the PR's head commit.
+      - name: Run CI on the branch
+        run: gh workflow run ci.yml --ref "$BRANCH"
