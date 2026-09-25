@@ -59,6 +59,7 @@ jobs:
             Follow .claude/skills/refresh-ai-stack/SKILL.md end to end.
             You are on branch ${{ steps.branch.outputs.name }}; PR_BODY_FILE is ${{ env.PR_BODY_FILE }}; PR_DRAFT_FILE is ${{ env.PR_DRAFT_FILE }}.
           claude_args: >-
+            --model claude-sonnet-5
             --max-turns 150
             --allowedTools "Read,Edit,Write,Glob,Grep,WebFetch,Bash(cd:*),Bash(ls:*),Bash(cat:*),Bash(head:*),Bash(tail:*),Bash(find:*),Bash(wc:*),Bash(uv:*),Bash(uvx:*),Bash(grep:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git add:*),Bash(git commit:*)"
 
