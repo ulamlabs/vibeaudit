@@ -4,10 +4,12 @@ These call the display methods directly (no DB needed) to guard against the
 `format_html` misuse that crashed on report bodies containing literal braces.
 """
 
+import pytest
 from django.contrib.admin.sites import site
+from django.test import override_settings
 
-from audit.admin import AgentRunOutputInline, AuditRunAdmin
-from audit.models import AgentRunOutput, AuditRun
+from audit.admin import AgentRunOutputInline, AuditRunAdmin, AuditSuiteAdminForm
+from audit.models import AgentRunOutput, AuditRun, AuditSuite
 
 
 class _Obj:
@@ -34,3 +36,17 @@ def test_rendered_output_sanitizes_and_renders():
     html = inline.rendered_output(_Obj(output="**bold** <script>alert(1)</script>"))
     assert "<strong>bold</strong>" in html
     assert "<script>" not in html
+
+
+@pytest.mark.django_db
+def test_suite_form_keeps_unlisted_current_model_selectable():
+    suite = AuditSuite.objects.create(name="Old", model="claude-retired-1")
+    with override_settings(AVAILABLE_AI_MODELS=["claude-sonnet-5"]):
+        choices = AuditSuiteAdminForm(instance=suite).fields["model"].widget.choices
+    assert [value for value, _ in choices] == ["claude-retired-1", "claude-sonnet-5"]
+
+
+def test_suite_form_offers_only_listed_models_for_new_suite():
+    with override_settings(AVAILABLE_AI_MODELS=["claude-sonnet-5"]):
+        choices = AuditSuiteAdminForm().fields["model"].widget.choices
+    assert [value for value, _ in choices] == ["claude-sonnet-5"]
