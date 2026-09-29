@@ -243,8 +243,8 @@ AVAILABLE_AI_MODELS: list[str] = env.list(
     "AVAILABLE_AI_MODELS",
     default=[
         "claude-haiku-4-5",
-        "claude-sonnet-4-6",
-        "claude-opus-4-7",
+        "claude-sonnet-5",
+        "claude-opus-5-5",
     ],
 )
 AI_ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY", default="")

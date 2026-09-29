@@ -10,7 +10,7 @@ from audit.ai.output import SubmittedReport
 from audit.ai.runner import _run_orchestrator
 from audit.models import AuditSuite
 
-MODEL = "claude-sonnet-4-6"
+MODEL = "claude-sonnet-5"
 
 
 @pytest.mark.django_db
