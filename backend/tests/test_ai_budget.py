@@ -7,6 +7,9 @@ from litellm import cost_per_token
 
 from audit.ai.budget import CostBudgetCallback, CostBudgetExceeded
 
+# Intentionally not AVAILABLE_AI_MODELS' default: this exercises real
+# litellm.cost_per_token() against LITELLM_LOCAL_MODEL_COST_MAP's bundled
+# snapshot (conftest.py), which lags the live model_cost the app runs with.
 MODEL = "claude-sonnet-5"
 
 
