@@ -41,12 +41,12 @@ def test_rendered_output_sanitizes_and_renders():
 @pytest.mark.django_db
 def test_suite_form_keeps_unlisted_current_model_selectable():
     suite = AuditSuite.objects.create(name="Old", model="claude-retired-1")
-    with override_settings(AVAILABLE_AI_MODELS=["claude-sonnet-5"]):
+    with override_settings(AVAILABLE_AI_MODELS=["claude-sonnet-5-5"]):
         choices = AuditSuiteAdminForm(instance=suite).fields["model"].widget.choices
-    assert [value for value, _ in choices] == ["claude-retired-1", "claude-sonnet-5"]
+    assert [value for value, _ in choices] == ["claude-retired-1", "claude-sonnet-5-5"]
 
 
 def test_suite_form_offers_only_listed_models_for_new_suite():
-    with override_settings(AVAILABLE_AI_MODELS=["claude-sonnet-5"]):
+    with override_settings(AVAILABLE_AI_MODELS=["claude-sonnet-5-5"]):
         choices = AuditSuiteAdminForm().fields["model"].widget.choices
-    assert [value for value, _ in choices] == ["claude-sonnet-5"]
+    assert [value for value, _ in choices] == ["claude-sonnet-5-5"]
