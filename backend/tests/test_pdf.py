@@ -6,7 +6,7 @@ from github_app.models import Installation
 
 @pytest.fixture
 def suite(db):
-    return AuditSuite.objects.create(name="test-suite", model="claude-haiku-4-5")
+    return AuditSuite.objects.create(name="test-suite", model="claude-haiku-5-5")
 
 
 @pytest.fixture
